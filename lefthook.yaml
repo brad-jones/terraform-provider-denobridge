@@ -1,0 +1,12 @@
+# spec: https://github.com/evilmartians/lefthook/blob/master/docs/configuration.md
+
+pre-commit:
+  commands:
+    dprint:
+      run: dprint fmt --allow-no-files {staged_files}
+      stage_fixed: true
+
+commit-msg:
+  commands:
+    lint:
+      run: cog verify -f {1}

@@ -1,0 +1,39 @@
+{
+  "deno.enable": true,
+  "deno.cacheOnSave": true,
+  "editor.rulers": [80, 120],
+  "editor.renderWhitespace": "boundary",
+  "editor.formatOnPaste": true,
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.sortImports": "explicit"
+  },
+  "files.associations": {
+    "*.gitmsgtpl": "git-commit"
+  },
+
+  // We need to explcitly define all language specfic settings
+  // see: https://github.com/microsoft/vscode/issues/107184
+  "editor.defaultFormatter": "dprint.dprint",
+  "[json]": {
+    "editor.defaultFormatter": "dprint.dprint"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "dprint.dprint"
+  },
+  "[toml]": {
+    "editor.defaultFormatter": "dprint.dprint"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "dprint.dprint"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "dprint.dprint"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "dprint.dprint"
+  },
+  "[go]": {
+    "editor.defaultFormatter": "dprint.dprint"
+  }
+}

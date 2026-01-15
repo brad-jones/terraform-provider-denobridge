@@ -1,0 +1,21 @@
+[workspace]
+channels = ["https://prefix.dev/brads-forge", "conda-forge"]
+platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
+
+[tasks]
+init = "task init"
+
+[tasks.code]
+depends-on = ["init"]
+cmd = "code ."
+
+[dependencies]
+cocogitto = ">=6.5.0,<7"
+deno = ">=2.6.4,<2.7"
+dprint = ">=0.51.1,<0.52"
+go = ">=1.25.5,<2"
+httpie = ">=3.2.4,<4"
+lefthook = ">=2.0.13,<3"
+opentofu = ">=1.11.2,<2"
+task = ">=3.46.4,<4"
+terraform = ">=1.14.3,<2"

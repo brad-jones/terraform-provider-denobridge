@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+# https://taskfile.dev
+version: 3
+
+dotenv: [".env"]
+set: [pipefail]
+shopt: [globstar]
+
+tasks:
+  init:
+    desc: Setup dev env (anything that pixi can't install and setup for us).
+    cmds:
+      - lefthook install -f
+      - git config pull.rebase true
+      - git config core.editor "code --wait"
+      - git config commit.template "$PWD/.gitmsgtpl"
+      - "{{if .CI}}git config --global user.name github-actions[bot]{{end}}"
+      - "{{if .CI}}git config --global user.email github-actions[bot]@users.noreply.github.com{{end}}"
+
+  install-go-tools:
+    desc: Installs all the golang dev tooling that vscode needs (for some reason the auto install that VsCode tries to run fails)
+    cmds:
+      - go install -v github.com/cweill/gotests/gotests@v1.6.0
+      - go install -v github.com/josharian/impl@v1.4.0
+      - go install -v github.com/haya14busa/goplay/cmd/goplay@v1.0.0
+      - go install -v github.com/go-delve/delve/cmd/dlv@latest
+      - go install -v golang.org/x/tools/gopls@latest
+
+  build:
+    desc: Builds the terraform provider executable
+    cmds:
+      - go build -o ./bin/terraform-provider-denobridge.exe ./main.go
+
+  test:
+    desc: Runs the test suite (including tf acceptance tests)
+    env:
+      TF_ACC: 1
+      TF_LOG: DEBUG
+    cmds:
+      - go test -v ./internal/provider/... {{.CLI_ARGS}}
+
+  run:tf:
+    desc: Run any terraform command against the example stack.
+    summary: |
+      This is useful for exploratory testing and development.
+
+      Eg: task run:terraform -- apply
+    deps:
+      - build
+    env:
+      TF_LOG: WARN
+      TF_CLI_CONFIG_FILE: "{{.ROOT_DIR}}/.tofurc"
+    cmds:
+      - cd ./example && terraform {{.CLI_ARGS}}
+
+  run:tofu:
+    desc: Run any tofu command against the example stack.
+    summary: |
+      This is useful for exploratory testing and development.
+
+      Eg: task run:tofu -- apply
+    deps:
+      - build
+    env:
+      TF_LOG: WARN
+      TF_CLI_CONFIG_FILE: "{{.ROOT_DIR}}/.tofurc"
+    cmds:
+      - cd ./example && tofu {{.CLI_ARGS}}
+
+  run:clean:
+    desc: Deletes any state associated with the example stack
+    cmds:
+      - |
+          echo '
+          function remove(path: string) {
+            try {
+              Deno.removeSync(path);
+            } catch (error) {
+              if (!(error instanceof Deno.errors.NotFound)) {
+                throw error;
+              }
+            }
+          }
+          remove("./example/terraform.tfstate");
+          remove("./example/terraform.tfstate.backup");
+          remove("./example/bjc.mx");
+          ' | deno run -qA -
