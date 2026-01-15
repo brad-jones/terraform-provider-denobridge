@@ -1,5 +1,7 @@
 .env
 .tofurc
+*.tfstate*
+example/bjc.mx
 bin/
 dist/
 
