@@ -20,7 +20,7 @@ func TestAction(t *testing.T) {
 		},
 		Steps: []resource.TestStep{
 			{
-				Config: `
+				Config: testAccProviderConfig() + `
 					resource "terraform_data" "test" {
 						input = "fake-string"
 

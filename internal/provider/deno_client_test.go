@@ -18,7 +18,7 @@ func TestDenoClient(t *testing.T) {
 
 	scriptPath := filepath.Join(t.TempDir(), "test.ts")
 	err = os.WriteFile(scriptPath, []byte(`
-		import { Hono } from "jsr:@hono/hono";
+		import { Hono } from "npm:hono@4";
 
 		const app = new Hono();
 

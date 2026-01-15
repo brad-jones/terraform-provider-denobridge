@@ -1,5 +1,5 @@
-import { Hono } from "hono";
-import { streamText } from "hono/streaming";
+import { Hono } from "npm:hono@4";
+import { streamText } from "npm:hono@4/streaming";
 
 const app = new Hono();
 

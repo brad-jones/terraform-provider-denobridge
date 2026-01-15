@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
@@ -20,7 +22,26 @@ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 }
 
 func testAccPreCheck(t *testing.T) {
-	// You can add code here to run prior to any test case execution, for example assertions
-	// about the appropriate environment variables being set are common to see in a pre-check
-	// function.
+	// Set TF_ACC_TERRAFORM_PATH to avoid downloading Terraform in CI
+	// This allows tests to use the terraform binary that's already installed
+	if os.Getenv("TF_ACC_TERRAFORM_PATH") == "" {
+		if tfPath, err := exec.LookPath("terraform"); err == nil {
+			t.Setenv("TF_ACC_TERRAFORM_PATH", tfPath)
+		}
+	}
+}
+
+// testAccProviderConfig returns the provider configuration block for acceptance tests.
+// It checks for an existing Deno binary in PATH and configures the provider to use it,
+// avoiding the need to download Deno during tests.
+func testAccProviderConfig() string {
+	denoBinary, err := exec.LookPath("deno")
+	if err != nil {
+		// If deno is not in PATH, return empty config which will trigger auto-download
+		return `provider "denobridge" {}`
+	}
+
+	return `provider "denobridge" {
+  deno_binary_path = "` + denoBinary + `"
+}`
 }

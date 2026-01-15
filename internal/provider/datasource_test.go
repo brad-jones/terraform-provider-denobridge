@@ -18,7 +18,7 @@ func TestDataSource(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: `
+				Config: testAccProviderConfig() + `
 					data "denobridge_datasource" "test" {
 						path = "./datasource_test.ts"
 						props = {

@@ -20,7 +20,7 @@ func TestResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create test
 			{
-				Config: `
+				Config: testAccProviderConfig() + `
 					resource "denobridge_resource" "test" {
 						path  = "./resource_test.ts"
 						props = {
@@ -62,7 +62,7 @@ func TestResource(t *testing.T) {
 			},
 			// Update in place test
 			{
-				Config: `
+				Config: testAccProviderConfig() + `
 					resource "denobridge_resource" "test" {
 						path  = "./resource_test.ts"
 						props = {
@@ -104,7 +104,7 @@ func TestResource(t *testing.T) {
 			},
 			// Replacement test
 			{
-				Config: `
+				Config: testAccProviderConfig() + `
 					resource "denobridge_resource" "test" {
 						path  = "./resource_test.ts"
 						props = {

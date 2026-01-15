@@ -24,7 +24,7 @@ func TestEphemeralResource(t *testing.T) {
 		},
 		Steps: []resource.TestStep{
 			{
-				Config: `
+				Config: testAccProviderConfig() + `
 					ephemeral "denobridge_ephemeral_resource" "test" {
 						path = "./ephemeral_resource_test.ts"
 					}
