@@ -6,6 +6,9 @@ dotenv: [".env"]
 set: [pipefail]
 shopt: [globstar]
 
+env:
+  CGO_ENABLED: 0
+
 tasks:
   init:
     desc: Setup dev env (anything that pixi can't install and setup for us).
@@ -28,8 +31,6 @@ tasks:
 
   lint:
     desc: Lints our code to ensure it remains of a high quality.
-    env:
-      CGO_ENABLED: 0
     cmds:
       - dprint check
       - golangci-lint run
