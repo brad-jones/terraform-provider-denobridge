@@ -68,7 +68,7 @@ tasks:
             provider_installation {
 
               dev_overrides {
-                "example.registry.local/brad-jones/denobridge" = "${Deno.env.get("TF_BIN_DIR").replaceAll("\\", "\\\\")}"
+                "registry.terraform.io/brad-jones/denobridge" = "${Deno.env.get("TF_BIN_DIR").replaceAll("\\", "\\\\")}"
               }
 
               direct {}

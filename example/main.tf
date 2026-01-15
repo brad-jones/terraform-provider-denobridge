@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     denobridge = {
-      source = "example.registry.local/brad-jones/denobridge"
+      source = "registry.terraform.io/brad-jones/denobridge"
     }
   }
 }

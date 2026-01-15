@@ -19,7 +19,7 @@ var (
 
 func main() {
 	err := providerserver.Serve(context.Background(), provider.New(version), providerserver.ServeOpts{
-		Address: "example.registry.local/brad-jones/denobridge",
+		Address: "registry.terraform.io/brad-jones/denobridge",
 	})
 	if err != nil {
 		log.Fatal(err.Error())
