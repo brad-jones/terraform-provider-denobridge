@@ -1,7 +1,7 @@
 provider_installation {
 
   dev_overrides {
-      "example.registry.local/brad-jones/denobridge" = "C:\\Users\\BradJones\\Projects\\Personal\\deno-tofu-bridge\\bin"
+      "example.registry.local/brad-jones/denobridge" = "C:\\Users\\BradJones\\Projects\\Personal\\deno-tf-bridge\\bin"
   }
 
   # For all other providers, install them directly from their origin provider

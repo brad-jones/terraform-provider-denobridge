@@ -1,4 +1,4 @@
-module github.com/brad-jones/deno-tofu-bridge
+module github.com/brad-jones/deno-tf-bridge
 
 go 1.25.5
 
