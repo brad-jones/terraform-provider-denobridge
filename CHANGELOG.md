@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.2.0](https://github.com/brad-jones/terraform-provider-denobridge/compare/a83aab7283a2ccded7342d3102059e82a282bb80..v0.2.0) - 2026-01-27
+#### Features
+- added config_file attribute and automatic config file discovery - ([3566c73](https://github.com/brad-jones/terraform-provider-denobridge/commit/3566c733e29e5519b2b273bc6887e981aea7a331)) - github-actions[bot]
+#### Miscellaneous Chores
+- bump pixi lock file - ([a83aab7](https://github.com/brad-jones/terraform-provider-denobridge/commit/a83aab7283a2ccded7342d3102059e82a282bb80)) - github-actions[bot]
+
+- - -
+
 ## [v0.1.1](https://github.com/brad-jones/terraform-provider-denobridge/compare/de2faf30ffc938f870e0854e2f202e010265b40c..v0.1.1) - 2026-01-16
 #### Bug Fixes
 - (**resource**) while the state is optional, we don't require state to be returned from the deno script, setting this value here caused tfdocs to treat it as an input property which it is not. - ([de2faf3](https://github.com/brad-jones/terraform-provider-denobridge/commit/de2faf30ffc938f870e0854e2f202e010265b40c)) - [@brad-jones](https://github.com/brad-jones)
