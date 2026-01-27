@@ -34,6 +34,7 @@ type denoBridgeEphemeralResourceModel struct {
 	Path        types.String       `tfsdk:"path"`
 	Props       types.Dynamic      `tfsdk:"props"`
 	Result      types.Dynamic      `tfsdk:"result"`
+	ConfigFile  types.String       `tfsdk:"config_file"`
 	Permissions *denoPermissionsTF `tfsdk:"permissions"`
 }
 
@@ -43,7 +44,7 @@ func (r *denoBridgeEphemeralResource) Metadata(_ context.Context, req ephemeral.
 
 func (r *denoBridgeEphemeralResource) Schema(_ context.Context, _ ephemeral.SchemaRequest, resp *ephemeral.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages a resource via a Deno script with full CRUD lifecycle.",
+		Description: "Bridges the terraform-plugin-framework Ephemeral Resource to a Deno HTTP Server.",
 		Attributes: map[string]schema.Attribute{
 			"path": schema.StringAttribute{
 				Description: "Path to the Deno script to execute.",
@@ -56,6 +57,10 @@ func (r *denoBridgeEphemeralResource) Schema(_ context.Context, _ ephemeral.Sche
 			"result": schema.DynamicAttribute{
 				Description: "Output data returned from the Deno script.",
 				Computed:    true,
+			},
+			"config_file": schema.StringAttribute{
+				Description: "File path to a deno config file to use with the deno script. Useful for import maps, etc...",
+				Optional:    true,
 			},
 			"permissions": schema.SingleNestedAttribute{
 				Description: "Deno runtime permissions for the script.",
@@ -109,7 +114,12 @@ func (r *denoBridgeEphemeralResource) Open(ctx context.Context, req ephemeral.Op
 	}
 
 	// Start the Deno server
-	client := NewDenoClient(r.providerConfig.DenoBinaryPath, data.Path.ValueString(), data.Permissions.mapToDenoPermissions())
+	client := NewDenoClient(
+		r.providerConfig.DenoBinaryPath,
+		data.Path.ValueString(),
+		data.ConfigFile.ValueString(),
+		data.Permissions.mapToDenoPermissions(),
+	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to start Deno server",
@@ -166,6 +176,7 @@ func (r *denoBridgeEphemeralResource) Open(ctx context.Context, req ephemeral.Op
 	configJSON, err := json.Marshal(map[string]any{
 		"DenoBinaryPath":  r.providerConfig.DenoBinaryPath,
 		"DenoScriptPath":  data.Path.ValueString(),
+		"DenoConfigPath":  data.ConfigFile.ValueString(),
 		"DenoPermissions": data.Permissions.mapToDenoPermissions(),
 	})
 	if err != nil {
@@ -192,6 +203,7 @@ func (r *denoBridgeEphemeralResource) Renew(ctx context.Context, req ephemeral.R
 	var privateConfig struct {
 		DenoBinaryPath  string
 		DenoScriptPath  string
+		DenoConfigPath  string
 		DenoPermissions *denoPermissions
 	}
 	err := json.Unmarshal(privateConfigBytes, &privateConfig)
@@ -222,7 +234,12 @@ func (r *denoBridgeEphemeralResource) Renew(ctx context.Context, req ephemeral.R
 	}
 
 	// Start the Deno server
-	client := NewDenoClient(privateConfig.DenoBinaryPath, privateConfig.DenoScriptPath, privateConfig.DenoPermissions)
+	client := NewDenoClient(
+		privateConfig.DenoBinaryPath,
+		privateConfig.DenoScriptPath,
+		privateConfig.DenoConfigPath,
+		privateConfig.DenoPermissions,
+	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to start Deno server",
@@ -301,6 +318,7 @@ func (r *denoBridgeEphemeralResource) Close(ctx context.Context, req ephemeral.C
 	var privateConfig struct {
 		DenoBinaryPath  string
 		DenoScriptPath  string
+		DenoConfigPath  string
 		DenoPermissions *denoPermissions
 	}
 	err := json.Unmarshal(privateConfigBytes, &privateConfig)
@@ -331,7 +349,12 @@ func (r *denoBridgeEphemeralResource) Close(ctx context.Context, req ephemeral.C
 	}
 
 	// Start the Deno server
-	client := NewDenoClient(privateConfig.DenoBinaryPath, privateConfig.DenoScriptPath, privateConfig.DenoPermissions)
+	client := NewDenoClient(
+		privateConfig.DenoBinaryPath,
+		privateConfig.DenoScriptPath,
+		privateConfig.DenoConfigPath,
+		privateConfig.DenoPermissions,
+	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to start Deno server",

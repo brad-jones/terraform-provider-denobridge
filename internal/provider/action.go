@@ -32,6 +32,7 @@ type denoBridgeAction struct {
 type denoBridgeActionModel struct {
 	Path        types.String       `tfsdk:"path"`
 	Props       types.Dynamic      `tfsdk:"props"`
+	ConfigFile  types.String       `tfsdk:"config_file"`
 	Permissions *denoPermissionsTF `tfsdk:"permissions"`
 }
 
@@ -41,7 +42,7 @@ func (a *denoBridgeAction) Metadata(ctx context.Context, req action.MetadataRequ
 
 func (a *denoBridgeAction) Schema(_ context.Context, _ action.SchemaRequest, resp *action.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages a resource via a Deno script with full CRUD lifecycle.",
+		Description: "Bridges the terraform-plugin-framework Action to a Deno HTTP Server.",
 		Attributes: map[string]schema.Attribute{
 			"path": schema.StringAttribute{
 				Description: "Path to the Deno script to execute.",
@@ -49,6 +50,10 @@ func (a *denoBridgeAction) Schema(_ context.Context, _ action.SchemaRequest, res
 			},
 			"props": schema.DynamicAttribute{
 				Description: "Input properties to pass to the Deno script.",
+				Optional:    true,
+			},
+			"config_file": schema.StringAttribute{
+				Description: "File path to a deno config file to use with the deno script. Useful for import maps, etc...",
 				Optional:    true,
 			},
 			"permissions": schema.SingleNestedAttribute{
@@ -102,7 +107,12 @@ func (a *denoBridgeAction) Invoke(ctx context.Context, req action.InvokeRequest,
 	}
 
 	// Start the Deno server
-	client := NewDenoClient(a.providerConfig.DenoBinaryPath, data.Path.ValueString(), data.Permissions.mapToDenoPermissions())
+	client := NewDenoClient(
+		a.providerConfig.DenoBinaryPath,
+		data.Path.ValueString(),
+		data.ConfigFile.ValueString(),
+		data.Permissions.mapToDenoPermissions(),
+	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to start Deno server",

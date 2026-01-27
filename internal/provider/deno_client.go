@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 // DenoClient manages a Deno HTTP server process and communication with it.
 type DenoClient struct {
 	scriptPath     string
+	configPath     string
 	permissions    *denoPermissions
 	denoBinaryPath string
 	process        *exec.Cmd
@@ -30,9 +32,10 @@ type DenoClient struct {
 }
 
 // NewDenoClient creates a new Deno client for the given script.
-func NewDenoClient(denoBinaryPath string, scriptPath string, permissions *denoPermissions) *DenoClient {
+func NewDenoClient(denoBinaryPath, scriptPath, configPath string, permissions *denoPermissions) *DenoClient {
 	return &DenoClient{
 		scriptPath:     scriptPath,
+		configPath:     configPath,
 		permissions:    permissions,
 		denoBinaryPath: denoBinaryPath,
 	}
@@ -53,6 +56,15 @@ func (c *DenoClient) Start(ctx context.Context) error {
 
 	// Build Deno command arguments
 	args := []string{"serve", "-q", "--port", fmt.Sprintf("%d", port)}
+
+	// Attempt to locate a deno config file if none given
+	configPath := c.configPath
+	if configPath == "" {
+		configPath = locateDenoConfigFile(c.scriptPath)
+	}
+	if configPath != "" && configPath != "/dev/null" {
+		args = append(args, "-c", configPath)
+	}
 
 	// Add permissions
 	if c.permissions != nil {
@@ -265,4 +277,75 @@ func pipeToErrorLog(ctx context.Context, reader io.Reader, prefix string) {
 			tflog.Error(ctx, prefix+scanner.Text())
 		}
 	}
+}
+
+// cachedConfigLookups stores config file paths to avoid repeated filesystem lookups.
+var cachedConfigLookups = make(map[string]string)
+
+// locateDenoConfigFile searches for a Deno configuration file (deno.json or deno.jsonc)
+// starting from the script file's directory and traversing upward through parent
+// directories until found or root is reached.
+//
+// Accepts both regular file paths and file:// URLs.
+// Results are cached to avoid repeated filesystem operations for the same file paths.
+func locateDenoConfigFile(scriptPath string) string {
+	// Convert file URL to path if needed
+	if strings.HasPrefix(scriptPath, "file://") {
+		parsedURL, err := url.Parse(scriptPath)
+		if err == nil && parsedURL.Scheme == "file" {
+			// On Windows, url.Parse for file:///C:/path gives Path="/C:/path"
+			// We need to remove the leading slash before the drive letter
+			path := parsedURL.Path
+			if len(path) > 2 && path[0] == '/' && path[2] == ':' {
+				path = path[1:]
+			}
+			scriptPath = filepath.FromSlash(path)
+		}
+	}
+
+	// Check if scriptPath has a protocol scheme other than file://
+	// If so, return empty string as remote script loading is not supported
+	if strings.Contains(scriptPath, "://") {
+		return ""
+	}
+
+	// Check cache first
+	if cached, ok := cachedConfigLookups[scriptPath]; ok {
+		return cached
+	}
+
+	// Start from the directory containing the script
+	currentDir := filepath.Dir(scriptPath)
+	volumeName := filepath.VolumeName(currentDir)
+
+	// Walk up the directory tree
+	for {
+		// Check for deno.json
+		denoJsonPath := filepath.Join(currentDir, "deno.json")
+		if _, err := os.Stat(denoJsonPath); err == nil {
+			cachedConfigLookups[scriptPath] = denoJsonPath
+			return denoJsonPath
+		}
+
+		// Check for deno.jsonc
+		denoJsoncPath := filepath.Join(currentDir, "deno.jsonc")
+		if _, err := os.Stat(denoJsoncPath); err == nil {
+			cachedConfigLookups[scriptPath] = denoJsoncPath
+			return denoJsoncPath
+		}
+
+		// Get parent directory
+		parentDir := filepath.Dir(currentDir)
+
+		// Check if we've reached the root
+		// On Windows: "C:\" becomes "C:\", on Unix: "/" becomes "/"
+		if parentDir == currentDir || parentDir == volumeName || parentDir == string(filepath.Separator) {
+			break
+		}
+
+		currentDir = parentDir
+	}
+
+	// No config file found
+	return ""
 }

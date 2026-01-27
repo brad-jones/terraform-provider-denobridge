@@ -37,6 +37,7 @@ type denoBridgeResourceModel struct {
 	Path        types.String       `tfsdk:"path"`
 	Props       types.Dynamic      `tfsdk:"props"`
 	State       types.Dynamic      `tfsdk:"state"`
+	ConfigFile  types.String       `tfsdk:"config_file"`
 	Permissions *denoPermissionsTF `tfsdk:"permissions"`
 }
 
@@ -48,7 +49,7 @@ func (r *denoBridgeResource) Metadata(_ context.Context, req resource.MetadataRe
 // Schema defines the schema for the resource.
 func (r *denoBridgeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages a resource via a Deno script with full CRUD lifecycle.",
+		Description: "Bridges the terraform-plugin-framework Resource to a Deno HTTP Server.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "Unique identifier for the resource.",
@@ -68,6 +69,10 @@ func (r *denoBridgeResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"state": schema.DynamicAttribute{
 				Description: "Additional computed state of the resource as returned by the Deno script.",
 				Computed:    true,
+			},
+			"config_file": schema.StringAttribute{
+				Description: "File path to a deno config file to use with the deno script. Useful for import maps, etc...",
+				Optional:    true,
 			},
 			"permissions": schema.SingleNestedAttribute{
 				Description: "Deno runtime permissions for the script.",
@@ -123,7 +128,12 @@ func (r *denoBridgeResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	// Start the Deno server
-	client := NewDenoClient(r.providerConfig.DenoBinaryPath, plan.Path.ValueString(), plan.Permissions.mapToDenoPermissions())
+	client := NewDenoClient(
+		r.providerConfig.DenoBinaryPath,
+		plan.Path.ValueString(),
+		plan.ConfigFile.ValueString(),
+		plan.Permissions.mapToDenoPermissions(),
+	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to start Deno server",
@@ -176,7 +186,12 @@ func (r *denoBridgeResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	// Start the Deno server
-	client := NewDenoClient(r.providerConfig.DenoBinaryPath, state.Path.ValueString(), state.Permissions.mapToDenoPermissions())
+	client := NewDenoClient(
+		r.providerConfig.DenoBinaryPath,
+		state.Path.ValueString(),
+		state.ConfigFile.ValueString(),
+		state.Permissions.mapToDenoPermissions(),
+	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to start Deno server",
@@ -243,7 +258,12 @@ func (r *denoBridgeResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	// Start the Deno server
-	client := NewDenoClient(r.providerConfig.DenoBinaryPath, plan.Path.ValueString(), plan.Permissions.mapToDenoPermissions())
+	client := NewDenoClient(
+		r.providerConfig.DenoBinaryPath,
+		plan.Path.ValueString(),
+		plan.ConfigFile.ValueString(),
+		plan.Permissions.mapToDenoPermissions(),
+	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to start Deno server",
@@ -302,7 +322,12 @@ func (r *denoBridgeResource) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 
 	// Start the Deno server
-	client := NewDenoClient(r.providerConfig.DenoBinaryPath, state.Path.ValueString(), state.Permissions.mapToDenoPermissions())
+	client := NewDenoClient(
+		r.providerConfig.DenoBinaryPath,
+		state.Path.ValueString(),
+		state.ConfigFile.ValueString(),
+		state.Permissions.mapToDenoPermissions(),
+	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to start Deno server",
@@ -363,13 +388,16 @@ func (r *denoBridgeResource) ModifyPlan(ctx context.Context, req resource.Modify
 	// Get the deno script from the plan for create & update operations.
 	// Otherwise for delete we get the details from the existing state.
 	var denoScriptPath string
+	var denoConfigPath string
 	var denoPermissions *denoPermissionsTF
 	if plan != nil {
 		denoScriptPath = plan.Path.ValueString()
+		denoConfigPath = plan.ConfigFile.ValueString()
 		denoPermissions = plan.Permissions
 	} else {
 		if state != nil {
 			denoScriptPath = state.Path.ValueString()
+			denoConfigPath = state.ConfigFile.ValueString()
 			denoPermissions = state.Permissions
 		}
 	}
@@ -381,7 +409,12 @@ func (r *denoBridgeResource) ModifyPlan(ctx context.Context, req resource.Modify
 	}
 
 	// Start the Deno server
-	client := NewDenoClient(r.providerConfig.DenoBinaryPath, denoScriptPath, denoPermissions.mapToDenoPermissions())
+	client := NewDenoClient(
+		r.providerConfig.DenoBinaryPath,
+		denoScriptPath,
+		denoConfigPath,
+		denoPermissions.mapToDenoPermissions(),
+	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to start Deno server",
@@ -512,6 +545,7 @@ func (r *denoBridgeResource) ImportState(ctx context.Context, req resource.Impor
 		ID          string           `json:"id"`
 		Path        string           `json:"path"`
 		Props       *map[string]any  `json:"props,omitempty"`
+		ConfigFile  *string          `json:"config_file,omitempty"`
 		Permissions *denoPermissions `json:"permissions,omitempty"`
 	}
 	err := json.Unmarshal([]byte(req.ID), &importConfig)
@@ -532,6 +566,7 @@ func (r *denoBridgeResource) ImportState(ctx context.Context, req resource.Impor
 		ID:          types.StringValue(importConfig.ID),
 		Path:        types.StringValue(importConfig.Path),
 		Props:       props,
+		ConfigFile:  types.StringPointerValue(importConfig.ConfigFile),
 		Permissions: importConfig.Permissions.mapToDenoPermissionsTF(),
 	})...)
 }

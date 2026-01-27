@@ -3,12 +3,12 @@
 page_title: "denobridge_ephemeral_resource Ephemeral Resource - terraform-provider-denobridge"
 subcategory: ""
 description: |-
-  Manages a resource via a Deno script with full CRUD lifecycle.
+  Bridges the terraform-plugin-framework Ephemeral Resource to a Deno HTTP Server.
 ---
 
 # denobridge_ephemeral_resource (Ephemeral Resource)
 
-Manages a resource via a Deno script with full CRUD lifecycle.
+Bridges the terraform-plugin-framework Ephemeral Resource to a Deno HTTP Server.
 
 ## Example Usage
 
@@ -22,6 +22,15 @@ ephemeral "denobridge_ephemeral_resource" "uuid" {
   props = {
     type = "v4"
   }
+
+  # Optionally provide a path to a deno config file.
+  #
+  # If none is given, the denobridge provider will attempt to locate the closest
+  # config file relative to the script path. This is to ensure that things like
+  # import maps work as expected.
+  #
+  # If you wish to opt out of this automatic config discovery, supply the path "/dev/null".
+  config_file = "/path/to/deno.json"
 
   # Optionally set any runtime permissions that the deno script may require.
   permissions = {
@@ -51,6 +60,7 @@ resource "foo" "bar" {
 
 ### Optional
 
+- `config_file` (String) File path to a deno config file to use with the deno script. Useful for import maps, etc...
 - `permissions` (Attributes) Deno runtime permissions for the script. (see [below for nested schema](#nestedatt--permissions))
 - `props` (Dynamic) Input properties to pass to the Deno script.
 

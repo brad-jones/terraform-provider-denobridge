@@ -8,6 +8,15 @@ action "denobridge_action" "launch_rocket" {
     destination = "mars"
   }
 
+  # Optionally provide a path to a deno config file.
+  #
+  # If none is given, the denobridge provider will attempt to locate the closest
+  # config file relative to the script path. This is to ensure that things like
+  # import maps work as expected.
+  #
+  # If you wish to opt out of this automatic config discovery, supply the path "/dev/null".
+  config_file = "/path/to/deno.json"
+
   # Optionally set any runtime permissions that the deno script may require.
   permissions = {
     all = true # Maps to --allow-all (use with caution!)
