@@ -80,12 +80,42 @@ func (c *DenoClient) Start(ctx context.Context) error {
 		}
 	}
 
-	// Add script path
-	absPath, err := filepath.Abs(c.scriptPath)
-	if err != nil {
-		return fmt.Errorf("failed to resolve script path: %w", err)
+	// Handle script path - support file:// URLs and remote URLs
+	var scriptArg string
+	if strings.Contains(c.scriptPath, "://") {
+		// Parse URL
+		parsedURL, err := url.Parse(c.scriptPath)
+		if err != nil {
+			return fmt.Errorf("failed to parse script URL: %w", err)
+		}
+
+		if parsedURL.Scheme == "file" {
+			// Convert file:// URL to local path
+			path := parsedURL.Path
+			// On Windows, url.Parse for file:///C:/path gives Path="/C:/path"
+			// We need to remove the leading slash before the drive letter
+			if len(path) > 2 && path[0] == '/' && path[2] == ':' {
+				path = path[1:]
+			}
+			localPath := filepath.FromSlash(path)
+			absPath, err := filepath.Abs(localPath)
+			if err != nil {
+				return fmt.Errorf("failed to resolve script path: %w", err)
+			}
+			scriptArg = absPath
+		} else {
+			// Remote URL (http://, https://, etc.) - pass as-is
+			scriptArg = c.scriptPath
+		}
+	} else {
+		// Local file path - convert to absolute path
+		absPath, err := filepath.Abs(c.scriptPath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve script path: %w", err)
+		}
+		scriptArg = absPath
 	}
-	args = append(args, absPath)
+	args = append(args, scriptArg)
 
 	// Create command
 	c.process = exec.CommandContext(ctx, c.denoBinaryPath, args...)
