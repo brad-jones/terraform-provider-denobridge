@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.2.2](https://github.com/brad-jones/terraform-provider-denobridge/compare/c4c8959eb918ef7a0cccc1914bf8e1f15104dcab..v0.2.2) - 2026-01-28
+#### Bug Fixes
+- (**build**) goreleasers changelog feature needs to be enabled for the --release-notes flag to work I think - ([c4c8959](https://github.com/brad-jones/terraform-provider-denobridge/commit/c4c8959eb918ef7a0cccc1914bf8e1f15104dcab)) - github-actions[bot]
+
+- - -
+
 ## [v0.2.1](https://github.com/brad-jones/terraform-provider-denobridge/compare/5d8fd11ad21e78b551a108d6a57b04a01090b008..v0.2.1) - 2026-01-28
 #### Bug Fixes
 - (**build**) should get some nice changelog text in the github release now - ([5d8fd11](https://github.com/brad-jones/terraform-provider-denobridge/commit/5d8fd11ad21e78b551a108d6a57b04a01090b008)) - github-actions[bot]
