@@ -90,6 +90,15 @@ func (c *DenoClient) Start(ctx context.Context) error {
 	// Create command
 	c.process = exec.CommandContext(ctx, c.denoBinaryPath, args...)
 
+	// Log the full command being executed
+	fullCmd := append([]string{c.denoBinaryPath}, args...)
+	cmdStr := strings.Join(fullCmd, " ")
+	if isTestContext() {
+		log.Printf("[DEBUG] Executing Deno command: %s", cmdStr)
+	} else {
+		tflog.Debug(ctx, fmt.Sprintf("Executing Deno command: %s", cmdStr))
+	}
+
 	// Capture stdout and stderr through tflog
 	stdout, err := c.process.StdoutPipe()
 	if err != nil {
