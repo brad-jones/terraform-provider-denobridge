@@ -47,131 +47,16 @@ The [` + "`" + `terraform import` + "`" + ` command](https://developer.hashicorp
 {{codefile "shell" .ImportFile }}
 {{- end }}
 
-## OpenAPI Specification
+## Implementation Guide
 
-HTTP API contract for Terraform `denobridge_datasource` implementations.
+The provider communicates with your TypeScript/JavaScript code using **JSON-RPC 2.0 over stdio** (standard input/output).
 
-This specification defines the endpoints that a Deno TypeScript script must implement
-to provide data source functionality in Terraform.
+For implementation details, see the [JSON-RPC Interface Guide](../guides/json-rpc-interface.md) which documents:
+- Complete OpenRPC specification for the datasource ` read` method
+- Request/response examples with actual JSON-RPC messages
+- Error handling patterns
+- Using the `@brad-jones/terraform-provider-denobridge` JSR package with abstract base classes
 
-Data sources are read-only and are used to fetch external data that can be used
-elsewhere in Terraform configuration. The provider will start your Deno script
-as an HTTP server and call the `/read` endpoint to fetch data.
+**Recommended approach**: Extend `DenoBridgeDatasource` from the JSR package rather than implementing the JSON-RPC protocol directly.
 
-```yaml
-openapi: 3.1.0
-info:
-  title: DenoBridge Datasource API
-  version: 1.0.0
-
-servers:
-  - url: http://localhost:{port}
-    description: Local Deno HTTP server (port assigned dynamically)
-    variables:
-      port:
-        default: "0"
-        description: Port dynamically assigned by the provider
-
-paths:
-  /health:
-    get:
-      summary: Health check endpoint
-      description: |
-        The provider polls this endpoint until it receives a successful response
-        before attempting to call any other endpoints.
-      responses:
-        "204":
-          description: |
-            Server is ready to accept requests.
-            NB: 200 is also accepted for flexibility.
-
-  /read:
-    post:
-      summary: Fetch data from the data source
-      description: |
-        Retrieves data based on the provided input properties.
-
-        Data sources are read-only and do not create or modify any infrastructure.
-        They are evaluated during the plan phase and used to fetch external data
-        that can be referenced in other Terraform resources.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - props
-              properties:
-                props:
-                  type: object
-                  description: Input properties that specify what data to fetch
-                  additionalProperties: true
-            example:
-              props:
-                value: "example-string"
-      responses:
-        "200":
-          description: Data fetched successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                description: The fetched data that will be available to Terraform
-                additionalProperties: true
-              example:
-                hashedValue: "50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c"
-        "4XX":
-          description: Client error during data fetch
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "5XX":
-          description: Server error during data fetch
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-components:
-  schemas:
-    Error:
-      type: object
-      properties:
-        error:
-          type: string
-          description: Error message describing what went wrong
-```
-
-## Example Server
-
-This shows how one might fulfil the above OpenAPI specification.
-
-The script **MUST** export a `default` export that satisfies `Deno.ServeDefaultExport`.
-So that it can be executed with [`deno serve`](https://docs.deno.com/runtime/reference/cli/serve/).
-
-_NB: Using Hono is not a requirement, your welcome to use your favorite HTTP server library._
-
-```ts
-import { Hono } from "jsr:@hono/hono";
-
-const app = new Hono();
-
-app.get("/health", (c) => {
-  return c.body(null, 204);
-});
-
-app.post("/read", async (c) => {
-  const body = await c.req.json();
-  const { query, recordType } = body.props;
-  const result = await Deno.resolveDns(query, recordType, {
-    nameServer: { ipAddr: "1.1.1.1", port: 53 },
-  });
-  return c.json(result);
-});
-
-export default app satisfies Deno.ServeDefaultExport;
-```
-
-_read more: <https://developer.hashicorp.com/terraform/plugin/framework/data-sources>_
+_See also: <https://developer.hashicorp.com/terraform/plugin/framework/data-sources>_

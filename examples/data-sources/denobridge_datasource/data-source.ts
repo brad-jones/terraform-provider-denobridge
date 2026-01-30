@@ -1,18 +1,15 @@
-import { Hono } from "jsr:@hono/hono";
+import { DenoBridgeDatasource } from "@brad-jones/terraform-provider-denobridge";
 
-const app = new Hono();
+interface Props {
+  query: string;
+  recordType: "A" | "AAAA" | "CNAME" | "MX" | "TXT";
+}
 
-app.get("/health", (c) => {
-  return c.body(null, 204);
-});
-
-app.post("/read", async (c) => {
-  const body = await c.req.json();
-  const { query, recordType } = body.props;
-  const result = await Deno.resolveDns(query, recordType, {
-    nameServer: { ipAddr: "1.1.1.1", port: 53 },
-  });
-  return c.json(result);
-});
-
-export default app satisfies Deno.ServeDefaultExport;
+export default class DnsLookupDatasource extends DenoBridgeDatasource<Props, string[]> {
+  async read(props: Props) {
+    const result = await Deno.resolveDns(props.query, props.recordType, {
+      nameServer: { ipAddr: "1.1.1.1", port: 53 },
+    });
+    return result as string[];
+  }
+}

@@ -127,39 +127,47 @@ func (r *denoBridgeResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	// Start the Deno server
+	// Start the Deno process
 	client := NewDenoClient(
 		r.providerConfig.DenoBinaryPath,
 		plan.Path.ValueString(),
 		plan.ConfigFile.ValueString(),
 		plan.Permissions.mapToDenoPermissions(),
+		"resource",
 	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
-			"Failed to start Deno server",
-			fmt.Sprintf("Could not start Deno HTTP server: %s", err.Error()),
+			"Failed to start Deno process",
+			fmt.Sprintf("Could not start Deno process: %s", err.Error()),
 		)
 		return
 	}
 	defer func() {
 		if err := client.Stop(); err != nil {
 			resp.Diagnostics.AddWarning(
-				"Failed to stop Deno server",
-				fmt.Sprintf("Could not stop Deno HTTP server: %s", err.Error()),
+				"Failed to stop Deno process",
+				fmt.Sprintf("Could not stop Deno process: %s", err.Error()),
 			)
 		}
 	}()
 
-	// Call the create endpoint
-	var response *struct {
-		ID    string          `json:"id"`
-		State *map[string]any `json:"state"`
+	// Create JSON-RPC socket
+	socket := r.providerConfig.jsocketPackage.NewResourceSocket(
+		ctx,
+		client.GetStdout(),
+		client.GetStdin(),
+	)
+	defer socket.Close()
+
+	// Call the create method
+	props := fromDynamic(plan.Props)
+	propsMap, ok := props.(map[string]any)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid props type", "Props must be a map")
+		return
 	}
-	if err := client.C().
-		Post("/create").
-		SetBody(map[string]any{"props": fromDynamic(plan.Props)}).
-		Do(ctx).
-		Into(&response); err != nil {
+	id, state, err := socket.Create(ctx, propsMap)
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to create resource",
 			fmt.Sprintf("Could not create resource via Deno script: %s", err.Error()),
@@ -167,11 +175,14 @@ func (r *denoBridgeResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	// Set state
-	plan.ID = types.StringValue(response.ID)
-	if response.State != nil {
-		plan.State = toDynamic(response.State)
+	// Set state - convert id to string
+	idStr, ok := id.(string)
+	if !ok {
+		// Try to convert other types to string
+		idStr = fmt.Sprintf("%v", id)
 	}
+	plan.ID = types.StringValue(idStr)
+	plan.State = toDynamic(state)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -185,40 +196,47 @@ func (r *denoBridgeResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	// Start the Deno server
+	// Start the Deno process
 	client := NewDenoClient(
 		r.providerConfig.DenoBinaryPath,
 		state.Path.ValueString(),
 		state.ConfigFile.ValueString(),
 		state.Permissions.mapToDenoPermissions(),
+		"resource",
 	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
-			"Failed to start Deno server",
-			fmt.Sprintf("Could not start Deno HTTP server: %s", err.Error()),
+			"Failed to start Deno process",
+			fmt.Sprintf("Could not start Deno process: %s", err.Error()),
 		)
 		return
 	}
 	defer func() {
 		if err := client.Stop(); err != nil {
 			resp.Diagnostics.AddWarning(
-				"Failed to stop Deno server",
-				fmt.Sprintf("Could not stop Deno HTTP server: %s", err.Error()),
+				"Failed to stop Deno process",
+				fmt.Sprintf("Could not stop Deno process: %s", err.Error()),
 			)
 		}
 	}()
 
-	// Call the read endpoint
-	var response *struct {
-		Props  map[string]any  `json:"props"`
-		State  *map[string]any `json:"state"`
-		Exists *bool           `json:"exists"`
+	// Create JSON-RPC socket
+	socket := r.providerConfig.jsocketPackage.NewResourceSocket(
+		ctx,
+		client.GetStdout(),
+		client.GetStdin(),
+	)
+	defer socket.Close()
+
+	// Call the read method
+	props := fromDynamic(state.Props)
+	propsMap, ok := props.(map[string]any)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid props type", "Props must be a map")
+		return
 	}
-	if err := client.C().
-		Post("/read").
-		SetBody(map[string]any{"id": state.ID.ValueString(), "props": fromDynamic(state.Props)}).
-		Do(ctx).
-		Into(&response); err != nil {
+	response, err := socket.Read(ctx, state.ID.ValueString(), propsMap)
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to read resource",
 			fmt.Sprintf("Could not read resource via Deno script: %s", err.Error()),
@@ -233,9 +251,7 @@ func (r *denoBridgeResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	// Set refreshed state
 	state.Props = toDynamic(response.Props)
-	if response.State != nil {
-		state.State = toDynamic(response.State)
-	}
+	state.State = toDynamic(response.State)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -257,43 +273,65 @@ func (r *denoBridgeResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	// Start the Deno server
+	// Start the Deno process
 	client := NewDenoClient(
 		r.providerConfig.DenoBinaryPath,
 		plan.Path.ValueString(),
 		plan.ConfigFile.ValueString(),
 		plan.Permissions.mapToDenoPermissions(),
+		"resource",
 	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
-			"Failed to start Deno server",
-			fmt.Sprintf("Could not start Deno HTTP server: %s", err.Error()),
+			"Failed to start Deno process",
+			fmt.Sprintf("Could not start Deno process: %s", err.Error()),
 		)
 		return
 	}
 	defer func() {
 		if err := client.Stop(); err != nil {
 			resp.Diagnostics.AddWarning(
-				"Failed to stop Deno server",
-				fmt.Sprintf("Could not stop Deno HTTP server: %s", err.Error()),
+				"Failed to stop Deno process",
+				fmt.Sprintf("Could not stop Deno process: %s", err.Error()),
 			)
 		}
 	}()
 
-	// Call the update endpoint
-	var response *struct {
-		State *map[string]any `json:"state"`
+	// Create JSON-RPC socket
+	socket := r.providerConfig.jsocketPackage.NewResourceSocket(
+		ctx,
+		client.GetStdout(),
+		client.GetStdin(),
+	)
+	defer socket.Close()
+
+	// Call the update method
+	nextProps := fromDynamic(plan.Props)
+	nextPropsMap, ok := nextProps.(map[string]any)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid props type", "Props must be a map")
+		return
 	}
-	if err := client.C().
-		Post("/update").
-		SetBody(map[string]any{
-			"id":           state.ID.ValueString(),
-			"nextProps":    fromDynamic(plan.Props),
-			"currentProps": fromDynamic(state.Props),
-			"currentState": fromDynamic(state.State),
-		}).
-		Do(ctx).
-		Into(&response); err != nil {
+	currentProps := fromDynamic(state.Props)
+	currentPropsMap, ok := currentProps.(map[string]any)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid props type", "Props must be a map")
+		return
+	}
+	currentState := fromDynamic(state.State)
+	currentStateMap, ok := currentState.(map[string]any)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid state type", "State must be a map")
+		return
+	}
+	updatedState, err := socket.Update(
+		ctx,
+		state.ID.ValueString(),
+		nextPropsMap,
+		currentPropsMap,
+		currentStateMap,
+	)
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to update resource",
 			fmt.Sprintf("Could not update resource via Deno script: %s", err.Error()),
@@ -305,9 +343,7 @@ func (r *denoBridgeResource) Update(ctx context.Context, req resource.UpdateRequ
 	plan.ID = state.ID
 
 	// Set updated state
-	if response.State != nil {
-		plan.State = toDynamic(response.State)
-	}
+	plan.State = toDynamic(updatedState)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -321,34 +357,52 @@ func (r *denoBridgeResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	// Start the Deno server
+	// Start the Deno process
 	client := NewDenoClient(
 		r.providerConfig.DenoBinaryPath,
 		state.Path.ValueString(),
 		state.ConfigFile.ValueString(),
 		state.Permissions.mapToDenoPermissions(),
+		"resource",
 	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
-			"Failed to start Deno server",
-			fmt.Sprintf("Could not start Deno HTTP server: %s", err.Error()),
+			"Failed to start Deno process",
+			fmt.Sprintf("Could not start Deno process: %s", err.Error()),
 		)
 		return
 	}
 	defer func() {
 		if err := client.Stop(); err != nil {
 			resp.Diagnostics.AddWarning(
-				"Failed to stop Deno server",
-				fmt.Sprintf("Could not stop Deno HTTP server: %s", err.Error()),
+				"Failed to stop Deno process",
+				fmt.Sprintf("Could not stop Deno process: %s", err.Error()),
 			)
 		}
 	}()
 
-	// Call the delete endpoint
-	if err := client.C().
-		Post("/delete").
-		SetBody(map[string]any{"id": state.ID.ValueString(), "props": fromDynamic(state.Props), "state": fromDynamic(state.State)}).
-		Do(ctx).Err; err != nil {
+	// Create JSON-RPC socket
+	socket := r.providerConfig.jsocketPackage.NewResourceSocket(
+		ctx,
+		client.GetStdout(),
+		client.GetStdin(),
+	)
+	defer socket.Close()
+
+	// Call the delete method
+	props := fromDynamic(state.Props)
+	propsMap, ok := props.(map[string]any)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid props type", "Props must be a map")
+		return
+	}
+	stateData := fromDynamic(state.State)
+	stateMap, ok := stateData.(map[string]any)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid state type", "State must be a map")
+		return
+	}
+	if err := socket.Delete(ctx, state.ID.ValueString(), propsMap, stateMap); err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to delete resource",
 			fmt.Sprintf("Could not delete resource via Deno script: %s", err.Error()),
@@ -408,129 +462,112 @@ func (r *denoBridgeResource) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
-	// Start the Deno server
+	// Start the Deno process
 	client := NewDenoClient(
 		r.providerConfig.DenoBinaryPath,
 		denoScriptPath,
 		denoConfigPath,
 		denoPermissions.mapToDenoPermissions(),
+		"resource",
 	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
-			"Failed to start Deno server",
-			fmt.Sprintf("Could not start Deno HTTP server: %s", err.Error()),
+			"Failed to start Deno process",
+			fmt.Sprintf("Could not start Deno process: %s", err.Error()),
 		)
 		return
 	}
 	defer func() {
 		if err := client.Stop(); err != nil {
 			resp.Diagnostics.AddWarning(
-				"Failed to stop Deno server",
-				fmt.Sprintf("Could not stop Deno HTTP server: %s", err.Error()),
+				"Failed to stop Deno process",
+				fmt.Sprintf("Could not stop Deno process: %s", err.Error()),
 			)
 		}
 	}()
 
-	// Build the request payload
-	id := ""
+	// Create JSON-RPC socket
+	socket := r.providerConfig.jsocketPackage.NewResourceSocket(
+		ctx,
+		client.GetStdout(),
+		client.GetStdin(),
+	)
+	defer socket.Close()
+
+	// Build the request parameters
+	var id any
 	if state != nil {
 		id = state.ID.ValueString()
 	}
-	planType := ""
-	var nextProps any
-	var currentProps any
-	var currentState any
+	var nextPropsMap map[string]any
+	var currentPropsMap map[string]any
+	var currentStateMap map[string]any
 	if plan != nil && state == nil {
-		planType = "create"
-		nextProps = fromDynamic(plan.Props)
+		// Create plan
+		nextProps := fromDynamic(plan.Props)
+		if m, ok := nextProps.(map[string]any); ok {
+			nextPropsMap = m
+		}
 	}
 	if plan != nil && state != nil {
-		planType = "update"
-		nextProps = fromDynamic(plan.Props)
-		currentProps = fromDynamic(state.Props)
-		currentState = fromDynamic(state.State)
+		// Update plan
+		nextProps := fromDynamic(plan.Props)
+		if m, ok := nextProps.(map[string]any); ok {
+			nextPropsMap = m
+		}
+		currentProps := fromDynamic(state.Props)
+		if m, ok := currentProps.(map[string]any); ok {
+			currentPropsMap = m
+		}
+		currentState := fromDynamic(state.State)
+		if m, ok := currentState.(map[string]any); ok {
+			currentStateMap = m
+		}
 	}
 	if plan == nil && state != nil {
-		planType = "delete"
-		currentProps = fromDynamic(state.Props)
-		currentState = fromDynamic(state.State)
-	}
-	requestPayload := map[string]any{
-		"id":       id,
-		"planType": planType,
-	}
-	if nextProps != nil {
-		requestPayload["nextProps"] = nextProps
-	}
-	if currentProps != nil {
-		requestPayload["currentProps"] = currentProps
-		requestPayload["currentState"] = currentState
+		// Delete plan
+		currentProps := fromDynamic(state.Props)
+		if m, ok := currentProps.(map[string]any); ok {
+			currentPropsMap = m
+		}
+		currentState := fromDynamic(state.State)
+		if m, ok := currentState.(map[string]any); ok {
+			currentStateMap = m
+		}
 	}
 
-	// Call the /modify-plan endpoint (if it exists) with full state and plan information
-	response := client.C().Post("/modify-plan").SetBody(requestPayload).Do(ctx)
-
-	// Check for a Not Content response - this just means the script purposefully elected to take no additional action
-	if response.StatusCode == 204 {
-		return
-	}
-
-	// Check if it's a 404 - that's expected for scripts that don't implement /modify-plan
-	if response.StatusCode == 404 {
-		return
-	}
-
-	// Otherwise check for any other types of errors
-	if response.Err != nil {
-		resp.Diagnostics.AddError("POST /modify-plan failed", response.Err.Error())
-		return
-	}
-
-	// Parse the response payload
-	var responsePayload *struct {
-		ModifiedProps       *map[string]any `json:"modifiedProps"`
-		RequiresReplacement bool            `json:"requiresReplacement"`
-		Diagnostics         *[]struct {
-			Severity string  `json:"severity"`
-			Summary  string  `json:"summary"`
-			Detail   string  `json:"detail"`
-			PropName *string `json:"propName"`
-		} `json:"diagnostics"`
-	}
-	if err := response.Into(&responsePayload); err != nil {
-		resp.Diagnostics.AddError("POST /modify-plan failed to parse responsePayload", response.Err.Error())
+	// Call the modifyPlan method (optional)
+	responsePayload, err := socket.ModifyPlan(ctx, id, nextPropsMap, currentPropsMap, currentStateMap)
+	if err != nil {
+		// Check if method not found (optional method)
+		if err.Error() == "Method not found" {
+			return
+		}
+		resp.Diagnostics.AddError("modifyPlan failed", err.Error())
 		return
 	}
 
 	// Handle modified props - allows the script to modify the planned properties
-	if responsePayload.ModifiedProps != nil {
-		plan.Props = toDynamic(responsePayload.ModifiedProps)
+	if len(responsePayload.ModifiedProps) > 0 {
+		plan.Props = toDynamic(&responsePayload.ModifiedProps)
 		resp.Diagnostics.Append(resp.Plan.Set(ctx, plan)...)
 	}
 
 	// Handle requiresReplacement - instructing tf to do a create then delete instead of an update
-	if responsePayload.RequiresReplacement {
+	if responsePayload.RequiresReplacement != nil && *responsePayload.RequiresReplacement {
 		resp.RequiresReplace = append(resp.RequiresReplace, path.Root("props"))
 	}
 
 	// Handle diagnostics - allows the script to add warnings or errors
 	// Mainly for use with the Resource Destroy Plan Diagnostics workflow.
 	// see: https://developer.hashicorp.com/terraform/plugin/framework/resources/plan-modification#resource-destroy-plan-diagnostics
-	if responsePayload.Diagnostics != nil {
-		for _, diag := range *responsePayload.Diagnostics {
+	if len(responsePayload.Diagnostics) > 0 {
+		for _, diag := range responsePayload.Diagnostics {
 			switch diag.Severity {
 			case "error":
-				if diag.PropName != nil {
-					resp.Diagnostics.AddAttributeError(path.Root("props").AtMapKey(*diag.PropName), diag.Summary, diag.Detail)
-				} else {
-					resp.Diagnostics.AddError(diag.Summary, diag.Detail)
-				}
+				resp.Diagnostics.AddError(diag.Summary, diag.Detail)
 			case "warning":
-				if diag.PropName != nil {
-					resp.Diagnostics.AddAttributeWarning(path.Root("props").AtMapKey(*diag.PropName), diag.Summary, diag.Detail)
-				} else {
-					resp.Diagnostics.AddWarning(diag.Summary, diag.Detail)
-				}
+				resp.Diagnostics.AddWarning(diag.Summary, diag.Detail)
 			}
 		}
 	}

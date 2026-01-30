@@ -90,8 +90,8 @@ export interface JSocketOptions {
  *
  * // ServerMethods type is automatically inferred!
  * await using socket = createJSocket<RemoteMethods>(
- *   Deno.stdin.readable,
- *   Deno.stdout.writable,
+ *   Deno.stdin,
+ *   Deno.stdout,
  *   { debugLogging: true, responseTimeoutSec: 60 }
  * )((client) => ({
  *   // This method can call back to the remote party
@@ -156,8 +156,8 @@ export function createJSocket<ClientMethods extends JSONRPCMethods>(
  * };
  *
  * await using socket = createJSocket<RemoteMethods>(
- *   Deno.stdin.readable,
- *   Deno.stdout.writable,
+ *   Deno.stdin,
+ *   Deno.stdout,
  *   { debugLogging: true }
  * )((client) => ({
  *   async multiply(params: { x: number; y: number }) {
@@ -169,8 +169,8 @@ export function createJSocket<ClientMethods extends JSONRPCMethods>(
  * // Using constructor directly (requires both type parameters)
  * type LocalMethods = { multiply(params: { x: number; y: number }): Promise<number> };
  * await using socket = new JSocket<RemoteMethods, LocalMethods>(
- *   Deno.stdin.readable,
- *   Deno.stdout.writable,
+ *   Deno.stdin,
+ *   Deno.stdout,
  *   (client) => ({
  *     async multiply(params: { x: number; y: number }) {
  *       return params.x * params.y;
@@ -248,8 +248,8 @@ export class JSocket<ClientMethods extends JSONRPCMethods, ServerMethods extends
    * @example
    * ```ts
    * const socket = new JSocket(
-   *   Deno.stdin.readable,
-   *   Deno.stdout.writable,
+   *   Deno.stdin,
+   *   Deno.stdout,
    *   (client) => ({
    *     async greet(params: { name: string }) {
    *       return { message: `Hello, ${params.name}!` };

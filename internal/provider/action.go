@@ -1,11 +1,8 @@
 package provider
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 
 	"github.com/hashicorp/terraform-plugin-framework/action"
 	"github.com/hashicorp/terraform-plugin-framework/action/schema"
@@ -106,89 +103,58 @@ func (a *denoBridgeAction) Invoke(ctx context.Context, req action.InvokeRequest,
 		return
 	}
 
-	// Start the Deno server
+	// Start the Deno process
 	client := NewDenoClient(
 		a.providerConfig.DenoBinaryPath,
 		data.Path.ValueString(),
 		data.ConfigFile.ValueString(),
 		data.Permissions.mapToDenoPermissions(),
+		"action",
 	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
-			"Failed to start Deno server",
-			fmt.Sprintf("Could not start Deno HTTP server: %s", err.Error()),
+			"Failed to start Deno process",
+			fmt.Sprintf("Could not start Deno process: %s", err.Error()),
 		)
 		return
 	}
 	defer func() {
 		if err := client.Stop(); err != nil {
 			resp.Diagnostics.AddWarning(
-				"Failed to stop Deno server",
-				fmt.Sprintf("Could not stop Deno HTTP server: %s", err.Error()),
+				"Failed to stop Deno process",
+				fmt.Sprintf("Could not stop Deno process: %s", err.Error()),
 			)
 		}
 	}()
 
-	// Call /invoke endpoint with the props
-	httpResp, err := client.C().R().
-		SetContext(ctx).
-		SetBody(map[string]any{"props": fromDynamic(data.Props)}).
-		Post("/invoke")
+	// Create JSON-RPC socket
+	socket := a.providerConfig.jsocketPackage.NewActionSocket(
+		ctx,
+		client.GetStdout(),
+		client.GetStdin(),
+	)
+	defer socket.Close()
 
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Failed to invoke action",
-			fmt.Sprintf("Could not call /invoke endpoint: %s", err.Error()),
-		)
-		return
-	}
-
-	if httpResp.StatusCode != 200 {
-		resp.Diagnostics.AddError(
-			"Action invocation failed",
-			fmt.Sprintf("Server returned status %d: %s", httpResp.StatusCode, httpResp.String()),
-		)
-		return
-	}
-
-	// Stream the JSONL response and send progress events
-	if err := streamJSONLProgress(httpResp.Body, resp); err != nil {
-		resp.Diagnostics.AddError(
-			"Failed to process streaming response",
-			fmt.Sprintf("Error reading streaming response: %s", err.Error()),
-		)
-		return
-	}
-}
-
-// streamJSONLProgress reads a streaming JSONL response and sends progress events.
-func streamJSONLProgress(body io.Reader, resp *action.InvokeResponse) error {
-	scanner := bufio.NewScanner(body)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			continue
-		}
-
-		// Parse the JSON line
-		var progressData struct {
-			Message string `json:"message"`
-		}
-
-		if err := json.Unmarshal([]byte(line), &progressData); err != nil {
-			return fmt.Errorf("failed to parse JSONL line: %w", err)
-		}
-
-		// Send the progress event
+	// Set up progress handler to send progress events
+	socket.SetProgressHandler(func(message string) {
 		resp.SendProgress(action.InvokeProgressEvent{
-			Message: progressData.Message,
+			Message: message,
 		})
+	})
+
+	// Call the invoke method with the props
+	props := fromDynamic(data.Props)
+	propsMap, ok := props.(map[string]any)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid props type", "Props must be a map")
+		return
+	}
+	result, err := socket.Invoke(ctx, propsMap)
+	if err != nil {
+		resp.Diagnostics.AddError("invoke failed", err.Error())
+		return
 	}
 
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading response stream: %w", err)
-	}
-
-	return nil
+	// Store the result (optional)
+	_ = result
 }

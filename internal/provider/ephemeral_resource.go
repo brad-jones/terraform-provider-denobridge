@@ -113,44 +113,48 @@ func (r *denoBridgeEphemeralResource) Open(ctx context.Context, req ephemeral.Op
 		return
 	}
 
-	// Start the Deno server
+	// Start the Deno process
 	client := NewDenoClient(
 		r.providerConfig.DenoBinaryPath,
 		data.Path.ValueString(),
 		data.ConfigFile.ValueString(),
 		data.Permissions.mapToDenoPermissions(),
+		"ephemeral",
 	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
-			"Failed to start Deno server",
-			fmt.Sprintf("Could not start Deno HTTP server: %s", err.Error()),
+			"Failed to start Deno process",
+			fmt.Sprintf("Could not start Deno process: %s", err.Error()),
 		)
 		return
 	}
 	defer func() {
 		if err := client.Stop(); err != nil {
 			resp.Diagnostics.AddWarning(
-				"Failed to stop Deno server",
-				fmt.Sprintf("Could not stop Deno HTTP server: %s", err.Error()),
+				"Failed to stop Deno process",
+				fmt.Sprintf("Could not stop Deno process: %s", err.Error()),
 			)
 		}
 	}()
 
-	// Call the open endpoint
-	var response *struct {
-		Result  any    `json:"result"`
-		RenewAt *int64 `json:"renewAt,omitempty"`
-		Private *any   `json:"private,omitempty"`
+	// Create JSON-RPC socket
+	socket := r.providerConfig.jsocketPackage.NewEphemeralResourceSocket(
+		ctx,
+		client.GetStdout(),
+		client.GetStdin(),
+	)
+	defer socket.Close()
+
+	// Call the open method
+	props := fromDynamic(data.Props)
+	propsMap, ok := props.(map[string]any)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid props type", "Props must be a map")
+		return
 	}
-	if err := client.C().
-		Post("/open").
-		SetBody(map[string]any{"props": fromDynamic(data.Props)}).
-		Do(ctx).
-		Into(&response); err != nil {
-		resp.Diagnostics.AddError(
-			"Failed to open data",
-			fmt.Sprintf("Could not open data from Deno script: %s", err.Error()),
-		)
+	response, err := socket.Open(ctx, propsMap)
+	if err != nil {
+		resp.Diagnostics.AddError("open failed", err.Error())
 		return
 	}
 
@@ -161,7 +165,7 @@ func (r *denoBridgeEphemeralResource) Open(ctx context.Context, req ephemeral.Op
 
 	// Set any private data
 	if response.Private != nil {
-		privateJSON, err := json.Marshal(*response.Private)
+		privateJSON, err := json.Marshal(response.Private)
 		if err != nil {
 			resp.Diagnostics.AddError(
 				"Failed to marshal private data",
@@ -233,59 +237,60 @@ func (r *denoBridgeEphemeralResource) Renew(ctx context.Context, req ephemeral.R
 		}
 	}
 
-	// Start the Deno server
+	// Start the Deno process
 	client := NewDenoClient(
 		privateConfig.DenoBinaryPath,
 		privateConfig.DenoScriptPath,
 		privateConfig.DenoConfigPath,
 		privateConfig.DenoPermissions,
+		"ephemeral",
 	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
-			"Failed to start Deno server",
-			fmt.Sprintf("Could not start Deno HTTP server: %s", err.Error()),
+			"Failed to start Deno process",
+			fmt.Sprintf("Could not start Deno process: %s", err.Error()),
 		)
 		return
 	}
 	defer func() {
 		if err := client.Stop(); err != nil {
 			resp.Diagnostics.AddWarning(
-				"Failed to stop Deno server",
-				fmt.Sprintf("Could not stop Deno HTTP server: %s", err.Error()),
+				"Failed to stop Deno process",
+				fmt.Sprintf("Could not stop Deno process: %s", err.Error()),
 			)
 		}
 	}()
 
-	// Call the renew endpoint
-	httpResp := client.C().
-		Post("/renew").
-		SetBody(privateData).
-		Do(ctx)
+	// Create JSON-RPC socket
+	socket := r.providerConfig.jsocketPackage.NewEphemeralResourceSocket(
+		ctx,
+		client.GetStdout(),
+		client.GetStdin(),
+	)
+	defer socket.Close()
 
-	// If endpoint not implemented, that's OK - just return
-	if httpResp.StatusCode == 404 {
-		return
+	// Convert privateData to map[string]any
+	var privateDataMap map[string]any
+	if privateData != nil {
+		var ok bool
+		privateDataMap, ok = privateData.(map[string]any)
+		if !ok {
+			resp.Diagnostics.AddError(
+				"Invalid private data type",
+				"Private data must be a map[string]any",
+			)
+			return
+		}
 	}
 
-	// Check for other errors
-	if httpResp.Err != nil {
-		resp.Diagnostics.AddError(
-			"Failed to renew",
-			fmt.Sprintf("Could not renew data from Deno script: %s", httpResp.Err.Error()),
-		)
-		return
-	}
-
-	// Parse response
-	var response *struct {
-		RenewAt *int64 `json:"renewAt,omitempty"`
-		Private *any   `json:"private,omitempty"`
-	}
-	if err := httpResp.Into(&response); err != nil {
-		resp.Diagnostics.AddError(
-			"Failed to parse renew response",
-			fmt.Sprintf("Could not parse response from Deno script: %s", err.Error()),
-		)
+	// Call the renew method (optional)
+	response, err := socket.Renew(ctx, privateDataMap)
+	if err != nil {
+		// Check if method not found (optional method)
+		if err.Error() == "Method not found" {
+			return
+		}
+		resp.Diagnostics.AddError("renew failed", err.Error())
 		return
 	}
 
@@ -295,8 +300,8 @@ func (r *denoBridgeEphemeralResource) Renew(ctx context.Context, req ephemeral.R
 	}
 
 	// Set new private data if provided
-	if response.Private != nil {
-		privateJSON, err := json.Marshal(*response.Private)
+	if len(response.Private) > 0 {
+		privateJSON, err := json.Marshal(response.Private)
 		if err != nil {
 			resp.Diagnostics.AddError(
 				"Failed to marshal private data",
@@ -348,46 +353,60 @@ func (r *denoBridgeEphemeralResource) Close(ctx context.Context, req ephemeral.C
 		}
 	}
 
-	// Start the Deno server
+	// Start the Deno process
 	client := NewDenoClient(
 		privateConfig.DenoBinaryPath,
 		privateConfig.DenoScriptPath,
 		privateConfig.DenoConfigPath,
 		privateConfig.DenoPermissions,
+		"ephemeral",
 	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
-			"Failed to start Deno server",
-			fmt.Sprintf("Could not start Deno HTTP server: %s", err.Error()),
+			"Failed to start Deno process",
+			fmt.Sprintf("Could not start Deno process: %s", err.Error()),
 		)
 		return
 	}
 	defer func() {
 		if err := client.Stop(); err != nil {
 			resp.Diagnostics.AddWarning(
-				"Failed to stop Deno server",
-				fmt.Sprintf("Could not stop Deno HTTP server: %s", err.Error()),
+				"Failed to stop Deno process",
+				fmt.Sprintf("Could not stop Deno process: %s", err.Error()),
 			)
 		}
 	}()
 
-	// Call the close endpoint
-	httpResp := client.C().
-		Post("/close").
-		SetBody(privateData).
-		Do(ctx)
+	// Create JSON-RPC socket
+	socket := r.providerConfig.jsocketPackage.NewEphemeralResourceSocket(
+		ctx,
+		client.GetStdout(),
+		client.GetStdin(),
+	)
+	defer socket.Close()
 
-	// If endpoint not implemented, that's OK - just return
-	if httpResp.StatusCode == 404 {
-		return
+	// Convert privateData to map[string]any
+	var privateDataMap map[string]any
+	if privateData != nil {
+		var ok bool
+		privateDataMap, ok = privateData.(map[string]any)
+		if !ok {
+			resp.Diagnostics.AddError(
+				"Invalid private data type",
+				"Private data must be a map[string]any",
+			)
+			return
+		}
 	}
 
-	// Check for other errors
-	if httpResp.Err != nil {
-		resp.Diagnostics.AddError(
-			"Failed to close",
-			fmt.Sprintf("Could not close data from Deno script: %s", httpResp.Err.Error()),
-		)
+	// Call the close method (optional)
+	err = socket.CloseResource(ctx, privateDataMap)
+	if err != nil {
+		// Check if method not found (optional method)
+		if err.Error() == "Method not found" {
+			return
+		}
+		resp.Diagnostics.AddError("close failed", err.Error())
 		return
 	}
 }

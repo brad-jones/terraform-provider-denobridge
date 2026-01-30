@@ -3,59 +3,72 @@ package provider
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/imroc/req/v3"
 )
 
-// DenoClient manages a Deno HTTP server process and communication with it.
+// DenoClient manages a Deno process and JSON-RPC communication with it.
 type DenoClient struct {
 	scriptPath     string
 	configPath     string
 	permissions    *denoPermissions
 	denoBinaryPath string
 	process        *exec.Cmd
-	port           int
-	baseURL        string
+	entrypointPath string
+	providerType   string // "datasource", "resource", "action", "ephemeral"
+	stdin          io.WriteCloser
+	stdout         io.ReadCloser
 	ctx            context.Context
 }
 
-// NewDenoClient creates a new Deno client for the given script.
-func NewDenoClient(denoBinaryPath, scriptPath, configPath string, permissions *denoPermissions) *DenoClient {
+// NewDenoClient creates a new Deno client for the given script and provider type.
+func NewDenoClient(denoBinaryPath, scriptPath, configPath string, permissions *denoPermissions, providerType string) *DenoClient {
 	return &DenoClient{
 		scriptPath:     scriptPath,
 		configPath:     configPath,
 		permissions:    permissions,
 		denoBinaryPath: denoBinaryPath,
+		providerType:   providerType,
 	}
 }
 
-// Start launches the Deno HTTP server process.
+// Start launches the Deno process with a generated entrypoint script.
 func (c *DenoClient) Start(ctx context.Context) error {
 	// Store context for logging
 	c.ctx = ctx
 
-	// Find an available port
-	port, err := getAvailablePort()
+	// Generate entrypoint script
+	entrypointContent, err := c.generateEntrypoint()
 	if err != nil {
-		return fmt.Errorf("failed to find available port: %w", err)
+		return fmt.Errorf("failed to generate entrypoint: %w", err)
 	}
-	c.port = port
-	c.baseURL = fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	// Create temp file for entrypoint
+	// Use a consistent name based on script path and provider type for easier debugging
+	scriptHash := sha256.Sum256([]byte(c.scriptPath + c.providerType))
+	tempFileName := fmt.Sprintf("denobridge_entrypoint_%s_%s.ts",
+		c.providerType,
+		hex.EncodeToString(scriptHash[:8]))
+	tempFilePath := filepath.Join(os.TempDir(), tempFileName)
+
+	if err := os.WriteFile(tempFilePath, []byte(entrypointContent), 0600); err != nil {
+		return fmt.Errorf("failed to write entrypoint script: %w", err)
+	}
+	c.entrypointPath = tempFilePath
 
 	// Build Deno command arguments
-	args := []string{"serve", "-q", "--port", fmt.Sprintf("%d", port)}
+	args := []string{"run", "-q"}
 
 	// Attempt to locate a deno config file if none given
 	configPath := c.configPath
@@ -80,45 +93,24 @@ func (c *DenoClient) Start(ctx context.Context) error {
 		}
 	}
 
-	// Handle script path - support file:// URLs and remote URLs
-	var scriptArg string
-	if strings.Contains(c.scriptPath, "://") {
-		// Parse URL
-		parsedURL, err := url.Parse(c.scriptPath)
-		if err != nil {
-			return fmt.Errorf("failed to parse script URL: %w", err)
-		}
-
-		if parsedURL.Scheme == "file" {
-			// Convert file:// URL to local path
-			path := parsedURL.Path
-			// On Windows, url.Parse for file:///C:/path gives Path="/C:/path"
-			// We need to remove the leading slash before the drive letter
-			if len(path) > 2 && path[0] == '/' && path[2] == ':' {
-				path = path[1:]
-			}
-			localPath := filepath.FromSlash(path)
-			absPath, err := filepath.Abs(localPath)
-			if err != nil {
-				return fmt.Errorf("failed to resolve script path: %w", err)
-			}
-			scriptArg = absPath
-		} else {
-			// Remote URL (http://, https://, etc.) - pass as-is
-			scriptArg = c.scriptPath
-		}
-	} else {
-		// Local file path - convert to absolute path
-		absPath, err := filepath.Abs(c.scriptPath)
-		if err != nil {
-			return fmt.Errorf("failed to resolve script path: %w", err)
-		}
-		scriptArg = absPath
-	}
-	args = append(args, scriptArg)
+	args = append(args, tempFilePath)
 
 	// Create command
 	c.process = exec.CommandContext(ctx, c.denoBinaryPath, args...)
+
+	// Get stdin/stdout pipes
+	stdin, err := c.process.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdin pipe: %w", err)
+	}
+	stdout, err := c.process.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+	stderr, err := c.process.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
 
 	// Log the full command being executed
 	fullCmd := append([]string{c.denoBinaryPath}, args...)
@@ -129,177 +121,263 @@ func (c *DenoClient) Start(ctx context.Context) error {
 		tflog.Debug(ctx, fmt.Sprintf("Executing Deno command: %s", cmdStr))
 	}
 
-	// Capture stdout and stderr through tflog
-	stdout, err := c.process.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stdout pipe: %w", err)
-	}
-	stderr, err := c.process.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stderr pipe: %w", err)
-	}
-
 	// Start the process
 	if err := c.process.Start(); err != nil {
 		return fmt.Errorf("failed to start Deno process: %w", err)
 	}
 
-	// Start goroutines to pipe output to tflog
-	go pipeToDebugLog(ctx, stdout, "[deno stdout] ")
+	// Store pipes for socket creation (done by caller)
+	c.stdin = stdin
+	c.stdout = stdout
+
+	// Start goroutine to pipe stderr to tflog
 	go pipeToErrorLog(ctx, stderr, "[deno stderr] ")
 
-	// Wait for the server to be ready
-	if err := c.waitForReady(ctx, 30*time.Second); err != nil {
-		if stopErr := c.Stop(); stopErr != nil {
-			return fmt.Errorf("deno server failed to become ready: %w, and failed to stop: %w", err, stopErr)
-		}
-		return fmt.Errorf("deno server failed to become ready: %w", err)
-	}
-
 	return nil
 }
 
-// Stop terminates the Deno HTTP server process.
+// GetStdin returns the stdin pipe for JSON-RPC communication
+func (c *DenoClient) GetStdin() io.WriteCloser {
+	return c.stdin
+}
+
+// GetStdout returns the stdout pipe for JSON-RPC communication
+func (c *DenoClient) GetStdout() io.ReadCloser {
+	return c.stdout
+}
+
+// Stop terminates the Deno process and cleans up the temporary entrypoint file.
 func (c *DenoClient) Stop() error {
+	var firstErr error
+
+	// Kill the process
 	if c.process != nil && c.process.Process != nil {
 		if err := c.process.Process.Kill(); err != nil {
-			return fmt.Errorf("failed to kill Deno process: %w", err)
+			firstErr = fmt.Errorf("failed to kill Deno process: %w", err)
 		}
 	}
-	return nil
+
+	// Delete the temporary entrypoint file
+	if c.entrypointPath != "" {
+		if err := os.Remove(c.entrypointPath); err != nil && !os.IsNotExist(err) {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("failed to remove entrypoint file: %w", err)
+			}
+		}
+	}
+
+	return firstErr
 }
 
-// waitForReady polls the health endpoint until the server responds.
-func (c *DenoClient) waitForReady(ctx context.Context, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+// generateEntrypoint generates the TypeScript entrypoint script that wires up
+// the user's provider script with JSocket for JSON-RPC communication.
+func (c *DenoClient) generateEntrypoint() (string, error) {
+	// Resolve script path
+	scriptPath := c.scriptPath
+	if strings.Contains(scriptPath, "://") {
+		// URL-based import (http:// https:// file://)
+		parsedURL, err := url.Parse(scriptPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse script URL: %w", err)
+		}
 
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	// Monitor process exit in a goroutine
-	processExited := make(chan error, 1)
-	go func() {
-		if c.process != nil {
-			err := c.process.Wait()
+		if parsedURL.Scheme == "file" {
+			// Convert file:// URL to absolute local path for import
+			path := parsedURL.Path
+			if len(path) > 2 && path[0] == '/' && path[2] == ':' {
+				path = path[1:]
+			}
+			localPath := filepath.FromSlash(path)
+			absPath, err := filepath.Abs(localPath)
 			if err != nil {
-				processExited <- fmt.Errorf("deno process exited with error: %w", err)
-			} else {
-				processExited <- fmt.Errorf("deno process exited unexpectedly")
+				return "", fmt.Errorf("failed to resolve script path: %w", err)
 			}
+			scriptPath = absPath
 		}
-	}()
+		// For http:// and https:// URLs, use them as-is
+	} else {
+		// Local file path - convert to absolute
+		absPath, err := filepath.Abs(scriptPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve script path: %w", err)
+		}
+		scriptPath = absPath
+	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("timeout waiting for Deno server to start")
-		case err := <-processExited:
-			return err
-		case <-ticker.C:
-			resp, err := c.C().R().SetContext(ctx).Get("/health")
-			if err != nil {
-				continue
-			}
-			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
-				return nil
-			}
-		}
+	// Determine debug logging based on TF_LOG environment variable
+	debugLogging := os.Getenv("TF_LOG") == "DEBUG"
+
+	// Generate entrypoint based on provider type
+	switch c.providerType {
+	case "datasource":
+		return c.generateDatasourceEntrypoint(scriptPath, debugLogging), nil
+	case "resource":
+		return c.generateResourceEntrypoint(scriptPath, debugLogging), nil
+	case "action":
+		return c.generateActionEntrypoint(scriptPath, debugLogging), nil
+	case "ephemeral":
+		return c.generateEphemeralEntrypoint(scriptPath, debugLogging), nil
+	default:
+		return "", fmt.Errorf("unknown provider type: %s", c.providerType)
 	}
 }
 
-// C returns a new req client instance, configured to talk to the deno child process. see: https://req.cool/
-func (c *DenoClient) C() *req.Client {
-	client := req.C().
-		SetBaseURL(c.baseURL).
-		SetCommonContentType("application/json").
-		SetLogger(&tflogAdapter{ctx: c.ctx})
+// generateDatasourceEntrypoint generates the entrypoint for datasource providers
+func (c *DenoClient) generateDatasourceEntrypoint(scriptPath string, debugLogging bool) string {
+	return fmt.Sprintf(`import { createJSocket } from "jsr:@brad-jones/terraform-provider-denobridge";
+import UserDataSource from %s;
 
-	// Only enable debug logging and dumping if TF_LOG is set to DEBUG
-	if os.Getenv("TF_LOG") == "DEBUG" {
-		client = client.EnableDebugLog().DevMode()
-	}
-
-	return client
+await using socket = createJSocket(
+  Deno.stdin,
+  Deno.stdout,
+  { debugLogging: %v }
+)(() => ({
+  async read(params: { props: Record<string, unknown> }) {
+    const instance = new UserDataSource();
+    const result = await instance.read(params.props as any);
+    return { result };
+  }
+}));
+`, escapeImportPath(scriptPath), debugLogging)
 }
 
-// getAvailablePort finds an available port on localhost.
-func getAvailablePort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, err
+// generateResourceEntrypoint generates the entrypoint for resource providers
+func (c *DenoClient) generateResourceEntrypoint(scriptPath string, debugLogging bool) string {
+	return fmt.Sprintf(`import { createJSocket } from "jsr:@brad-jones/terraform-provider-denobridge";
+import UserResource from %s;
+
+await using socket = createJSocket(
+  Deno.stdin,
+  Deno.stdout,
+  { debugLogging: %v }
+)(() => {
+  const instance = new UserResource();
+
+  return {
+    async create(params: { props: Record<string, unknown> }) {
+      const result = await instance.create(params.props as any);
+      return { id: result.id, state: result.state };
+    },
+
+    async read(params: { id: unknown; props: Record<string, unknown> }) {
+      const result = await instance.read(params.id as any, params.props as any);
+      if (result.exists === false) {
+        return { exists: false };
+      }
+      return { props: result.props, state: result.state, exists: true };
+    },
+
+    async update(params: { id: unknown; nextProps: Record<string, unknown>; currentProps: Record<string, unknown>; currentState: Record<string, unknown> }) {
+      const state = await instance.update(
+        params.id as any,
+        params.nextProps as any,
+        params.currentProps as any,
+        params.currentState as any
+      );
+      return { state };
+    },
+
+    async delete(params: { id: unknown; props: Record<string, unknown>; state: Record<string, unknown> }) {
+      await instance.delete(params.id as any, params.props as any, params.state as any);
+    },
+
+    async modifyPlan(params: { id: unknown | null; nextProps: Record<string, unknown>; currentProps: Record<string, unknown> | null; currentState: Record<string, unknown> | null }) {
+      if (instance.modifyPlan) {
+        const result = await instance.modifyPlan(
+          params.id as any,
+          params.nextProps as any,
+          params.currentProps as any,
+          params.currentState as any
+        );
+        return result || {};
+      }
+      throw new Error("Method not found");
+    }
+  };
+});
+`, escapeImportPath(scriptPath), debugLogging)
+}
+
+// generateActionEntrypoint generates the entrypoint for action providers
+func (c *DenoClient) generateActionEntrypoint(scriptPath string, debugLogging bool) string {
+	return fmt.Sprintf(`import { createJSocket } from "jsr:@brad-jones/terraform-provider-denobridge";
+import UserAction from %s;
+
+await using socket = createJSocket(
+  Deno.stdin,
+  Deno.stdout,
+  { debugLogging: %v }
+)((client) => ({
+  async invoke(params: { props: Record<string, unknown> }) {
+    const instance = new UserAction();
+    const result = await instance.invoke(params.props as any, client);
+    return { result };
+  }
+}));
+`, escapeImportPath(scriptPath), debugLogging)
+}
+
+// generateEphemeralEntrypoint generates the entrypoint for ephemeral resource providers
+func (c *DenoClient) generateEphemeralEntrypoint(scriptPath string, debugLogging bool) string {
+	return fmt.Sprintf(`import { createJSocket } from "jsr:@brad-jones/terraform-provider-denobridge";
+import UserEphemeralResource from %s;
+
+await using socket = createJSocket(
+  Deno.stdin,
+  Deno.stdout,
+  { debugLogging: %v }
+)(() => {
+  const instance = new UserEphemeralResource();
+
+  return {
+    async open(params: { props: Record<string, unknown> }) {
+      const result = await instance.open(params.props as any);
+      return result;
+    },
+
+    async renew(params: { private: Record<string, unknown> }) {
+      if (instance.renew) {
+        const result = await instance.renew(params.private as any);
+        return result || {};
+      }
+      throw new Error("Method not found");
+    },
+
+    async close(params: { private: Record<string, unknown> }) {
+      if (instance.close) {
+        await instance.close(params.private as any);
+      } else {
+        throw new Error("Method not found");
+      }
+    }
+  };
+});
+`, escapeImportPath(scriptPath), debugLogging)
+}
+
+// escapeImportPath converts a file path to a proper TypeScript import string
+func escapeImportPath(path string) string {
+	// If it's already a URL (http://, https://), return as JSON string
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		escaped, _ := json.Marshal(path)
+		return string(escaped)
 	}
 
-	listener, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, err
-	}
-	defer listener.Close()
+	// For local files on Windows, convert backslashes to forward slashes
+	path = filepath.ToSlash(path)
 
-	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
-	if !ok {
-		return 0, fmt.Errorf("failed to get TCP address from listener")
+	// For local files, use file:// URL format
+	if !strings.HasPrefix(path, "file://") {
+		path = "file://" + path
 	}
-	return tcpAddr.Port, nil
+
+	escaped, _ := json.Marshal(path)
+	return string(escaped)
 }
 
 // isTestContext returns true if running in a test context.
 func isTestContext() bool {
-	// Check if TF_LOG_PROVIDER_DENO_TOFU_BRIDGE is not set (typical in tests)
-	// or if explicit test mode is enabled
 	return os.Getenv("DENO_TOFU_BRIDGE_TEST_MODE") == "true"
-}
-
-// tflogAdapter adapts tflog to the req logger interface.
-type tflogAdapter struct {
-	ctx context.Context
-}
-
-func (l *tflogAdapter) Debugf(format string, v ...interface{}) {
-	msg := fmt.Sprintf(format, v...)
-	// Remove trailing newlines as tflog adds them
-	msg = strings.TrimRight(msg, "\n")
-	if isTestContext() {
-		log.Printf("[DEBUG] [req] %s", msg)
-	} else {
-		tflog.Debug(l.ctx, "[req] "+msg)
-	}
-}
-
-func (l *tflogAdapter) Warnf(format string, v ...interface{}) {
-	msg := fmt.Sprintf(format, v...)
-	msg = strings.TrimRight(msg, "\n")
-	if isTestContext() {
-		log.Printf("[WARN] [req] %s", msg)
-	} else {
-		tflog.Warn(l.ctx, "[req] "+msg)
-	}
-}
-
-func (l *tflogAdapter) Errorf(format string, v ...interface{}) {
-	msg := fmt.Sprintf(format, v...)
-	msg = strings.TrimRight(msg, "\n")
-	if isTestContext() {
-		log.Printf("[ERROR] [req] %s", msg)
-	} else {
-		tflog.Error(l.ctx, "[req] "+msg)
-	}
-}
-
-// pipeToDebugLog reads from a reader and logs each line as debug.
-func pipeToDebugLog(ctx context.Context, reader io.Reader, prefix string) {
-	scanner := bufio.NewScanner(reader)
-	if isTestContext() {
-		// In test context, write directly to stdout
-		for scanner.Scan() {
-			log.Printf("[DEBUG] %s%s", prefix, scanner.Text())
-		}
-	} else {
-		// In Terraform context, use tflog
-		for scanner.Scan() {
-			tflog.Debug(ctx, prefix+scanner.Text())
-		}
-	}
 }
 
 // pipeToErrorLog reads from a reader and logs each line as error.

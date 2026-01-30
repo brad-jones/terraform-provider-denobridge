@@ -113,36 +113,47 @@ func (d *denoBridgeDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	// Start the Deno server
+	// Start the Deno process
 	client := NewDenoClient(
 		d.providerConfig.DenoBinaryPath,
 		state.Path.ValueString(),
 		state.ConfigFile.ValueString(),
 		state.Permissions.mapToDenoPermissions(),
+		"datasource",
 	)
 	if err := client.Start(ctx); err != nil {
 		resp.Diagnostics.AddError(
-			"Failed to start Deno server",
-			fmt.Sprintf("Could not start Deno HTTP server: %s", err.Error()),
+			"Failed to start Deno process",
+			fmt.Sprintf("Could not start Deno process: %s", err.Error()),
 		)
 		return
 	}
 	defer func() {
 		if err := client.Stop(); err != nil {
 			resp.Diagnostics.AddWarning(
-				"Failed to stop Deno server",
-				fmt.Sprintf("Could not stop Deno HTTP server: %s", err.Error()),
+				"Failed to stop Deno process",
+				fmt.Sprintf("Could not stop Deno process: %s", err.Error()),
 			)
 		}
 	}()
 
-	// Call the read endpoint
-	var result any
-	if err := client.C().
-		Post("/read").
-		SetBody(map[string]any{"props": fromDynamic(state.Props)}).
-		Do(ctx).
-		Into(&result); err != nil {
+	// Create JSON-RPC socket
+	socket := d.providerConfig.jsocketPackage.NewDatasourceSocket(
+		ctx,
+		client.GetStdout(),
+		client.GetStdin(),
+	)
+	defer socket.Close()
+
+	// Call the read method
+	props := fromDynamic(state.Props)
+	propsMap, ok := props.(map[string]any)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid props type", "Props must be a map")
+		return
+	}
+	result, err := socket.Read(ctx, propsMap)
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to read data",
 			fmt.Sprintf("Could not read data from Deno script: %s", err.Error()),

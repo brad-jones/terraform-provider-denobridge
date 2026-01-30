@@ -1,20 +1,25 @@
-import { Hono } from "jsr:@hono/hono";
+import { DenoBridgeEphemeralResource } from "@brad-jones/terraform-provider-denobridge";
 
-const app = new Hono();
+interface Props {
+  type: "v4";
+}
 
-app.get("/health", (c) => {
-  return c.body(null, 204);
-});
+interface Result {
+  uuid: string;
+}
 
-app.post("/open", async (c) => {
-  const body = await c.req.json();
-  const { type } = body.props;
+export default class UuidEphemeralResource extends DenoBridgeEphemeralResource<Props, Result, never> {
+  async open(props: Props): Promise<{ result: Result; renewAt?: number; private?: never }> {
+    if (props.type !== "v4") {
+      throw new Error("Unsupported UUID type");
+    }
 
-  if (type !== "v4") {
-    return c.json({ error: "Unsupported UUID type" }, 422);
+    return {
+      result: {
+        uuid: crypto.randomUUID(),
+      },
+    };
   }
 
-  return c.json(crypto.randomUUID());
-});
-
-export default app satisfies Deno.ServeDefaultExport;
+  // renew and close methods are optional and not implemented for this simple example
+}

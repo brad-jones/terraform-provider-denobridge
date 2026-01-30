@@ -1,22 +1,14 @@
-import { Hono } from "hono";
-import { streamText } from "hono/streaming";
+import { DenoBridgeAction, type JSONRPCClient } from "@brad-jones/terraform-provider-denobridge";
 
-const app = new Hono();
+interface Props {
+  path: string;
+  content: string;
+}
 
-app.get("/health", (c) => {
-  return c.body(null, 204);
-});
-
-app.post("/invoke", async (c) => {
-  const body = await c.req.json();
-  const { path, content } = body.props;
-  c.header("Content-Type", "application/jsonl");
-
-  return streamText(c, async (stream) => {
-    await stream.writeln(JSON.stringify({ message: "about to write file" }));
-    await Deno.writeTextFile(path, content);
-    await stream.writeln(JSON.stringify({ message: "file written" }));
-  });
-});
-
-export default app satisfies Deno.ServeDefaultExport;
+export default class WriteFileAction extends DenoBridgeAction<Props, void> {
+  async invoke(props: Props, client: JSONRPCClient): Promise<void> {
+    await client.invokeProgress({ message: "about to write file" });
+    await Deno.writeTextFile(props.path, props.content);
+    await client.invokeProgress({ message: "file written" });
+  }
+}

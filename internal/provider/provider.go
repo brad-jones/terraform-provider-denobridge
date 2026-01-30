@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"io"
 
+	"github.com/brad-jones/terraform-provider-denobridge/internal/provider/jsocket"
 	"github.com/hashicorp/terraform-plugin-framework/action"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
@@ -43,6 +45,26 @@ type denoBridgeProviderModel struct {
 // ProviderConfig holds the resolved provider configuration.
 type ProviderConfig struct {
 	DenoBinaryPath string
+	jsocketPackage jsocketPackage
+}
+
+// jsocketPackage provides access to jsocket socket constructors
+type jsocketPackage struct{}
+
+func (j jsocketPackage) NewDatasourceSocket(ctx context.Context, reader io.ReadCloser, writer io.Writer) *jsocket.DatasourceSocket {
+	return jsocket.NewDatasourceSocket(ctx, reader, writer)
+}
+
+func (j jsocketPackage) NewResourceSocket(ctx context.Context, reader io.ReadCloser, writer io.Writer) *jsocket.ResourceSocket {
+	return jsocket.NewResourceSocket(ctx, reader, writer)
+}
+
+func (j jsocketPackage) NewActionSocket(ctx context.Context, reader io.ReadCloser, writer io.Writer) *jsocket.ActionSocket {
+	return jsocket.NewActionSocket(ctx, reader, writer)
+}
+
+func (j jsocketPackage) NewEphemeralResourceSocket(ctx context.Context, reader io.ReadCloser, writer io.Writer) *jsocket.EphemeralResourceSocket {
+	return jsocket.NewEphemeralResourceSocket(ctx, reader, writer)
 }
 
 // Metadata returns the provider type name.
