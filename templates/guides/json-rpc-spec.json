@@ -1,0 +1,578 @@
+{
+  "openrpc": "1.3.2",
+  "info": {
+    "title": "Terraform Provider Denobridge Protocol",
+    "version": "1.0.0",
+    "description": "JSON-RPC 2.0 protocol for communication between Terraform provider and Deno child processes"
+  },
+  "methods": [
+    {
+      "name": "health",
+      "description": "Health check to verify the Deno process is responsive",
+      "params": [],
+      "result": {
+        "name": "healthResult",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "description": "Always true when responding"
+            }
+          },
+          "required": ["ok"]
+        }
+      }
+    },
+    {
+      "name": "shutdown",
+      "description": "Signals graceful shutdown of the Deno process",
+      "params": [],
+      "result": {
+        "name": "shutdownResult",
+        "schema": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "name": "create",
+      "description": "Creates a new resource instance",
+      "tags": [
+        {
+          "name": "Resource"
+        }
+      ],
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "props": {
+                "type": "object",
+                "description": "User-defined configuration properties for the resource"
+              }
+            },
+            "required": ["props"]
+          }
+        }
+      ],
+      "result": {
+        "name": "createResult",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Unique identifier for the created resource"
+            },
+            "state": {
+              "type": "object",
+              "description": "Computed state values for the resource"
+            }
+          },
+          "required": ["id", "state"]
+        }
+      }
+    },
+    {
+      "name": "read",
+      "description": "Reads the current state of a resource instance or data from a data source",
+      "tags": [
+        {
+          "name": "Resource"
+        },
+        {
+          "name": "Data Source"
+        }
+      ],
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "oneOf": [
+              {
+                "type": "object",
+                "description": "For Resource providers",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Unique identifier of the resource to read"
+                  },
+                  "props": {
+                    "type": "object",
+                    "description": "Current configuration properties"
+                  }
+                },
+                "required": ["id", "props"]
+              },
+              {
+                "type": "object",
+                "description": "For Data Source providers",
+                "properties": {
+                  "props": {
+                    "type": "object",
+                    "description": "Configuration/query parameters for the data source"
+                  }
+                },
+                "required": ["props"]
+              }
+            ]
+          }
+        }
+      ],
+      "result": {
+        "name": "readResult",
+        "schema": {
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "For Resource providers when resource exists",
+              "properties": {
+                "props": {
+                  "type": "object",
+                  "description": "Refreshed configuration properties"
+                },
+                "state": {
+                  "type": "object",
+                  "description": "Refreshed computed state"
+                }
+              },
+              "required": ["props", "state"]
+            },
+            {
+              "type": "object",
+              "description": "For Resource providers when resource doesn't exist",
+              "properties": {
+                "exists": {
+                  "type": "boolean",
+                  "const": false,
+                  "description": "Indicates the resource no longer exists"
+                }
+              },
+              "required": ["exists"]
+            },
+            {
+              "type": "object",
+              "description": "For Data Source providers",
+              "properties": {
+                "result": {
+                  "type": "object",
+                  "description": "Retrieved data from the external source"
+                }
+              },
+              "required": ["result"]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "update",
+      "description": "Updates an existing resource instance",
+      "tags": [
+        {
+          "name": "Resource"
+        }
+      ],
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique identifier of the resource to update"
+              },
+              "nextProps": {
+                "type": "object",
+                "description": "New desired configuration properties"
+              },
+              "currentProps": {
+                "type": "object",
+                "description": "Current configuration properties before the update"
+              },
+              "currentState": {
+                "type": "object",
+                "description": "Current computed state before the update"
+              }
+            },
+            "required": ["id", "nextProps", "currentProps", "currentState"]
+          }
+        }
+      ],
+      "result": {
+        "name": "updateResult",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "object",
+              "description": "Updated computed state after the update"
+            }
+          },
+          "required": ["state"]
+        }
+      }
+    },
+    {
+      "name": "delete",
+      "description": "Deletes a resource instance",
+      "tags": [
+        {
+          "name": "Resource"
+        }
+      ],
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique identifier of the resource to delete"
+              },
+              "props": {
+                "type": "object",
+                "description": "Configuration properties"
+              },
+              "state": {
+                "type": "object",
+                "description": "Current computed state"
+              }
+            },
+            "required": ["id", "props", "state"]
+          }
+        }
+      ],
+      "result": {
+        "name": "deleteResult",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "done": {
+              "type": "boolean",
+              "description": "Must be true to indicate successful deletion"
+            }
+          },
+          "required": ["done"]
+        }
+      }
+    },
+    {
+      "name": "modifyPlan",
+      "description": "Optional method to modify planned values or indicate replacement is required",
+      "tags": [
+        {
+          "name": "Resource"
+        }
+      ],
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": ["string", "null"],
+                "description": "Resource identifier (null for create operations)"
+              },
+              "planType": {
+                "type": "string",
+                "enum": ["create", "update", "delete"],
+                "description": "Type of operation being planned"
+              },
+              "nextProps": {
+                "type": ["object", "null"],
+                "description": "Proposed new configuration properties (null for delete)"
+              },
+              "currentProps": {
+                "type": ["object", "null"],
+                "description": "Current configuration properties (null for create)"
+              },
+              "currentState": {
+                "type": ["object", "null"],
+                "description": "Current computed state (null for create)"
+              }
+            },
+            "required": ["planType"]
+          }
+        }
+      ],
+      "result": {
+        "name": "modifyPlanResult",
+        "schema": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "noChanges": {
+                  "type": "boolean",
+                  "const": true
+                }
+              },
+              "required": ["noChanges"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "modifiedProps": {
+                  "type": "object",
+                  "description": "Modified configuration values"
+                },
+                "diagnostics": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "severity": {
+                        "type": "string",
+                        "enum": ["error", "warning"]
+                      },
+                      "summary": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "propName": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["severity", "summary", "detail"]
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "requiresReplacement": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["requiresReplacement"]
+            }
+          ]
+        }
+      },
+      "errors": [
+        {
+          "code": -32601,
+          "message": "Method not found",
+          "data": "Returned when modifyPlan is not implemented"
+        }
+      ]
+    },
+    {
+      "name": "open",
+      "description": "Opens an ephemeral resource",
+      "tags": [
+        {
+          "name": "Ephemeral Resource"
+        }
+      ],
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "props": {
+                "type": "object",
+                "description": "Configuration properties for the ephemeral resource"
+              }
+            },
+            "required": ["props"]
+          }
+        }
+      ],
+      "result": {
+        "name": "openResult",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "result": {
+              "type": "object",
+              "description": "The ephemeral data to be made available"
+            },
+            "renewAt": {
+              "type": "integer",
+              "description": "Unix timestamp in seconds when renewal should occur"
+            },
+            "privateData": {
+              "type": "object",
+              "description": "Private data for internal use (passed to renew/close)"
+            }
+          },
+          "required": ["result"]
+        }
+      }
+    },
+    {
+      "name": "renew",
+      "description": "Optional method to renew an ephemeral resource",
+      "tags": [
+        {
+          "name": "Ephemeral Resource"
+        }
+      ],
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "privateData": {
+                "type": "object",
+                "description": "Private data from open or previous renew call"
+              }
+            },
+            "required": ["privateData"]
+          }
+        }
+      ],
+      "result": {
+        "name": "renewResult",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "renewAt": {
+              "type": "integer",
+              "description": "Unix timestamp in seconds for next renewal"
+            },
+            "privateData": {
+              "type": "object",
+              "description": "Updated private data for next renewal or close"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": -32601,
+          "message": "Method not found",
+          "data": "Returned when renew is not implemented"
+        }
+      ]
+    },
+    {
+      "name": "close",
+      "description": "Optional method to close an ephemeral resource and perform cleanup",
+      "tags": [
+        {
+          "name": "Ephemeral Resource"
+        }
+      ],
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "privateData": {
+                "type": "object",
+                "description": "Private data from open or renew call"
+              }
+            },
+            "required": ["privateData"]
+          }
+        }
+      ],
+      "result": {
+        "name": "closeResult",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "done": {
+              "type": "boolean",
+              "description": "Must be true to indicate successful closure"
+            }
+          },
+          "required": ["done"]
+        }
+      },
+      "errors": [
+        {
+          "code": -32601,
+          "message": "Method not found",
+          "data": "Returned when close is not implemented"
+        }
+      ]
+    },
+    {
+      "name": "invoke",
+      "description": "Invokes an action operation",
+      "tags": [
+        {
+          "name": "Action"
+        }
+      ],
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "props": {
+                "type": "object",
+                "description": "Parameters for the action"
+              }
+            },
+            "required": ["props"]
+          }
+        }
+      ],
+      "result": {
+        "name": "invokeResult",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "done": {
+              "type": "boolean",
+              "description": "Must be true to indicate successful completion"
+            }
+          },
+          "required": ["done"]
+        }
+      }
+    },
+    {
+      "name": "invokeProgress",
+      "description": "Reports progress during action execution (notification only, no response)",
+      "tags": [
+        {
+          "name": "Action"
+        }
+      ],
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "Progress message to display"
+              }
+            },
+            "required": ["message"]
+          }
+        }
+      ]
+    }
+  ]
+}

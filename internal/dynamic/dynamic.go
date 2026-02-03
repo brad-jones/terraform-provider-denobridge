@@ -1,3 +1,6 @@
+// Package dynamic provides utilities for converting between Terraform's dynamic types
+// and Go's native types. It handles bidirectional conversion between types.Dynamic
+// values and standard Go types like strings, numbers, bools, maps, and slices.
 package dynamic
 
 import (
@@ -9,6 +12,20 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
+// FromDynamic converts a Terraform Dynamic value to a native Go type.
+// It handles null values, primitives (string, bool, number), and complex types (list, map, object).
+//
+// Parameters:
+//   - dynVal: The Terraform Dynamic value to convert
+//
+// Returns a Go value of the appropriate type:
+//   - nil for null values
+//   - string for String values
+//   - bool for Bool values
+//   - float64 for Number values
+//   - []any for List values
+//   - map[string]any for Map and Object values
+//   - string representation for unknown types
 func FromDynamic(dynVal types.Dynamic) any {
 	if dynVal.IsNull() || dynVal.IsUnderlyingValueNull() {
 		return nil
@@ -54,6 +71,21 @@ func FromDynamic(dynVal types.Dynamic) any {
 	}
 }
 
+// FromValue converts a Terraform attr.Value to a native Go type.
+// It handles null values, Dynamic types, primitives, and complex types recursively.
+//
+// Parameters:
+//   - in: The Terraform attr.Value to convert
+//
+// Returns a Go value of the appropriate type:
+//   - nil for null values
+//   - Recursively converts Dynamic values via FromDynamic
+//   - string for String values
+//   - bool for Bool values
+//   - float64 for Number values
+//   - []any for List values (with recursive element conversion)
+//   - map[string]any for Map and Object values (with recursive element conversion)
+//   - string representation for unknown types
 func FromValue(in attr.Value) any {
 	if in.IsNull() {
 		return nil
@@ -99,6 +131,21 @@ func FromValue(in attr.Value) any {
 	}
 }
 
+// ToDynamic converts a native Go value to a Terraform Dynamic type.
+// It handles nil values, pointer dereferencing, primitives, and complex types.
+//
+// Parameters:
+//   - value: The Go value to convert (supports any, but specific types are handled specially)
+//
+// Returns a types.Dynamic value:
+//   - types.DynamicNull() for nil values
+//   - Automatically dereferences pointers before conversion
+//   - Converts string, bool, numeric types to appropriate Terraform types
+//   - Converts []any to types.List with Dynamic elements
+//   - Converts map[string]any to types.Object with Dynamic values
+//   - Falls back to string representation for unknown types
+//
+// Supported numeric types: float64, float32, int, int64, int32.
 func ToDynamic(value any) types.Dynamic {
 	if value == nil {
 		return types.DynamicNull()
@@ -106,7 +153,7 @@ func ToDynamic(value any) types.Dynamic {
 
 	// Dereference pointers
 	rv := reflect.ValueOf(value)
-	for rv.Kind() == reflect.Ptr {
+	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return types.DynamicNull()
 		}

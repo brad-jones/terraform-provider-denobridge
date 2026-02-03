@@ -5,12 +5,23 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
+// Permissions represents Deno runtime security permissions in Go-native types.
+// It controls what system resources the Deno runtime can access during execution.
 type Permissions struct {
-	All   bool
+	// All grants all permissions when true, effectively disabling security restrictions
+	All bool
+	// Allow is a list of specific permissions to grant (e.g., "read", "write", "net", "env")
 	Allow []string
-	Deny  []string
+	// Deny is a list of specific permissions to explicitly deny
+	Deny []string
 }
 
+// MapToDenoPermissionsTF converts Go-native Permissions to Terraform Framework types.
+// This is used when returning permission data to Terraform state or configuration.
+//
+// If permissions is nil, returns a PermissionsTF with safe defaults (All=false, empty lists).
+//
+// Returns a PermissionsTF struct with types.Bool and types.List fields suitable for Terraform.
 func (permissions *Permissions) MapToDenoPermissionsTF() *PermissionsTF {
 	if permissions == nil {
 		return &PermissionsTF{
@@ -49,12 +60,24 @@ func (permissions *Permissions) MapToDenoPermissionsTF() *PermissionsTF {
 	return output
 }
 
+// PermissionsTF represents Deno runtime security permissions using Terraform Framework types.
+// This struct is used for schema definitions and state management in Terraform.
 type PermissionsTF struct {
-	All   types.Bool `tfsdk:"all"`
+	// All grants all permissions when true, effectively disabling security restrictions
+	All types.Bool `tfsdk:"all"`
+	// Allow is a list of specific permissions to grant (e.g., "read", "write", "net", "env")
 	Allow types.List `tfsdk:"allow"`
-	Deny  types.List `tfsdk:"deny"`
+	// Deny is a list of specific permissions to explicitly deny
+	Deny types.List `tfsdk:"deny"`
 }
 
+// MapToDenoPermissions converts Terraform Framework types to Go-native Permissions.
+// This is used when reading permission configuration from Terraform into Go code.
+//
+// If permissions is nil, returns safe default permissions (All=false, empty slices),
+// which means the Deno runtime cannot perform any I/O operations.
+//
+// Returns a Permissions struct with native Go types (bool and []string).
 func (permissions *PermissionsTF) MapToDenoPermissions() *Permissions {
 	if permissions == nil {
 		// Default permissions, means deno can not perform any IO of any kind.
