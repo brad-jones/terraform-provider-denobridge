@@ -2,6 +2,21 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.2.5](https://github.com/brad-jones/terraform-provider-denobridge/compare/98bc4a27a4042aca618202debd6f3ac8be37c95c..v0.2.5) - 2026-02-03
+#### Bug Fixes
+- (**BaseJsonRpcProvider**) wrap all methods and log uncaught errors to stderr - ([454d80c](https://github.com/brad-jones/terraform-provider-denobridge/commit/454d80c4505db7bac048f9b5c13a3c66bdbb93c2)) - github-actions[bot]
+- (**JSocket**) use a promise chain for all write operations - ([f62a889](https://github.com/brad-jones/terraform-provider-denobridge/commit/f62a889bce44661a203a053046c9607de94c1c88)) - github-actions[bot]
+#### Documentation
+- small change to opening line in readme - ([c366f33](https://github.com/brad-jones/terraform-provider-denobridge/commit/c366f33caff141dd8f3eb2a6ed154e406b61b6a6)) - github-actions[bot]
+- updated the main readme to reflect the JSON-RPC changes - ([8d3acd7](https://github.com/brad-jones/terraform-provider-denobridge/commit/8d3acd7e23ce7df3b09cf9f270465389a1f7e27f)) - github-actions[bot]
+- updated everything reflect the new JSON-RPC transport layer - ([c2709e3](https://github.com/brad-jones/terraform-provider-denobridge/commit/c2709e3ae1db7c1ace8b4949dd8f23f99d20d894)) - github-actions[bot]
+#### Refactoring
+- changed transport layer from HTTP to JSON-RPC - ([fe4dcc9](https://github.com/brad-jones/terraform-provider-denobridge/commit/fe4dcc996156a5892364782e82cbaf82b2c4907c)) - github-actions[bot]
+#### Miscellaneous Chores
+- bump pixi lock file - ([98bc4a2](https://github.com/brad-jones/terraform-provider-denobridge/commit/98bc4a27a4042aca618202debd6f3ac8be37c95c)) - github-actions[bot]
+
+- - -
+
 ## [v0.2.4](https://github.com/brad-jones/terraform-provider-denobridge/compare/7609c9b8e515150e43776d377154a58acff362f9..v0.2.4) - 2026-01-28
 #### Bug Fixes
 - cater for file and other remote script urls when building the deno serve command - ([7609c9b](https://github.com/brad-jones/terraform-provider-denobridge/commit/7609c9b8e515150e43776d377154a58acff362f9)) - github-actions[bot]
