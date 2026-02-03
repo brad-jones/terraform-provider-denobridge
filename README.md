@@ -5,6 +5,7 @@
 _Bridge the infrastructure-as-code world with the TypeScript ecosystem_
 
 [![Built with Deno](https://img.shields.io/badge/Built%20with-Deno-00ADD8?style=flat&logo=deno)](https://deno.com/)
+[![JSR Version](https://img.shields.io/jsr/v/%40brad-jones/terraform-provider-denobridge?style=flat&logo=jsr)](https://jsr.io/@brad-jones/terraform-provider-denobridge)
 [![Terraform](https://img.shields.io/badge/Terraform-844FBA?style=flat&logo=terraform&logoColor=white)](https://registry.terraform.io/providers/brad-jones/denobridge/latest)
 [![OpenTofu](https://img.shields.io/badge/OpenTofu-FFDA18?style=flat&logo=opentofu&logoColor=black)](https://search.opentofu.org/provider/brad-jones/denobridge/latest)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](#)
@@ -17,7 +18,7 @@ _Bridge the infrastructure-as-code world with the TypeScript ecosystem_
 
 **Deno Tofu Bridge** allows you to implement Terraform provider logic in **TypeScript** instead of Go.
 
-Your TypeScript code runs as a Deno HTTP server, and the provider communicates with it via a well-defined HTTP API. This approach combines the **safety** 🔒 and **simplicity** ✨ of Deno with the **power** ⚡ of Terraform's infrastructure management.
+Your TypeScript code runs as a Deno process, and the provider communicates with it via a JSON-RPC 2.0 protocol over stdin/stdout. This approach combines the **safety** 🔒 and **simplicity** ✨ of Deno with the **power** ⚡ of Terraform's infrastructure management.
 
 Write provider logic in the language you know and love, with access to the entire npm ecosystem!
 
@@ -29,7 +30,8 @@ Write provider logic in the language you know and love, with access to the entir
 - 🎯 **Actions** - Execute operations like notifications, validations, or external workflows
 - 🛡️ **Type Safety** - Write provider logic in TypeScript with full type checking
 - 🔐 **Deno Permissions** - Fine-grained security control over what your code can access
-- 🌐 **HTTP-Based Protocol** - Simple, well-documented API contract between Go and TypeScript
+- 🔌 **JSON-RPC Protocol** - Simple, well-documented RPC protocol over stdin/stdout
+- 📚 **TypeScript Library** - Use the official JSR package for simplified development
 - ⚡ **Fast Development** - Rapid prototyping without Go expertise
 - 📦 **npm Ecosystem** - Leverage TypeScript's rich package ecosystem
 
@@ -108,71 +110,54 @@ Create a TypeScript file that manages a text file:
 **providers/resource_file.ts**
 
 ```typescript
-import { Hono } from "hono";
+import { ResourceProvider } from "jsr:@brad-jones/terraform-provider-denobridge";
 
-const app = new Hono();
+interface Props {
+  path: string;
+  content: string;
+}
 
-app.get("/health", (c) => {
-  return c.body(null, 204);
-});
+interface State {
+  mtime: number;
+}
 
-app.post("/create", async (c) => {
-  const body = await c.req.json();
-  const { path, content } = body.props;
-
-  await Deno.writeTextFile(path, content);
-
-  return c.json({
-    id: path,
-    state: {
-      mtime: (await Deno.stat(path)).mtime!.getTime(),
-    },
-  });
-});
-
-app.post("/read", async (c) => {
-  const body = await c.req.json();
-  const { id } = body;
-
-  try {
-    const content = await Deno.readTextFile(id);
-    return c.json({
-      props: { path: id, content },
+new ResourceProvider<Props, State>({
+  async create({ path, content }) {
+    await Deno.writeTextFile(path, content);
+    return {
+      id: path,
       state: {
-        mtime: (await Deno.stat(id)).mtime!.getTime(),
+        mtime: (await Deno.stat(path)).mtime!.getTime(),
       },
-    });
-  } catch (e) {
-    if (e instanceof Deno.errors.NotFound) {
-      return c.json({ exists: false });
+    };
+  },
+  async read(id, props) {
+    try {
+      const content = await Deno.readTextFile(id);
+      return {
+        props: { path: id, content },
+        state: {
+          mtime: (await Deno.stat(id)).mtime!.getTime(),
+        },
+      };
+    } catch (e) {
+      if (e instanceof Deno.errors.NotFound) {
+        return { exists: false };
+      }
+      throw e;
     }
-    throw e;
-  }
+  },
+  async update(id, nextProps, currentProps, currentState) {
+    if (nextProps.path !== currentProps.path) {
+      throw new Error("Cannot change file path - requires resource replacement");
+    }
+    await Deno.writeTextFile(id, nextProps.content);
+    return { mtime: (await Deno.stat(id)).mtime!.getTime() };
+  },
+  async delete(id) {
+    await Deno.remove(id);
+  },
 });
-
-app.post("/update", async (c) => {
-  const body = await c.req.json();
-  const { id } = body;
-  const { content: nextContent } = body.nextProps;
-
-  await Deno.writeTextFile(id, nextContent);
-
-  return c.json({
-    state: {
-      mtime: (await Deno.stat(id)).mtime!.getTime(),
-    },
-  });
-});
-
-app.post("/delete", async (c) => {
-  const body = await c.req.json();
-  const { id } = body;
-
-  await Deno.remove(id);
-  return c.body(null, 204);
-});
-
-export default app satisfies Deno.ServeDefaultExport;
 ```
 
 **main.tf**
@@ -199,26 +184,26 @@ Query DNS records using Deno's built-in DNS resolver:
 **providers/datasource_dns_record.ts**
 
 ```typescript
-import { Hono } from "hono";
+import { DatasourceProvider } from "jsr:@brad-jones/terraform-provider-denobridge";
 
-const app = new Hono();
+interface Props {
+  query: string;
+  recordType: "A" | "AAAA" | "ANAME" | "CNAME" | "NS" | "PTR";
+}
 
-app.get("/health", (c) => {
-  return c.body(null, 204);
+interface Result {
+  ips: string[];
+}
+
+new DatasourceProvider<Props, Result>({
+  async read({ query, recordType }) {
+    return {
+      ips: await Deno.resolveDns(query, recordType, {
+        nameServer: { ipAddr: "1.1.1.1", port: 53 },
+      }),
+    };
+  },
 });
-
-app.post("/read", async (c) => {
-  const body = await c.req.json();
-  const { query, recordType } = body.props;
-
-  const result = await Deno.resolveDns(query, recordType, {
-    nameServer: { ipAddr: "1.1.1.1", port: 53 },
-  });
-
-  return c.json(result);
-});
-
-export default app satisfies Deno.ServeDefaultExport;
 ```
 
 **main.tf**
@@ -248,17 +233,16 @@ output "mail_server" {
 
 Full CRUD lifecycle management for Terraform managed resources.
 
-**Required Endpoints:**
+**Required Methods:**
 
-- `GET /health` - Health check
-- `POST /create` - Create a new resource instance
-- `POST /read` - Read the current state
-- `POST /update` - Update an existing resource
-- `POST /delete` - Delete a resource
+- `create` - Create a new resource instance
+- `read` - Read the current state
+- `update` - Update an existing resource
+- `delete` - Delete a resource
 
-**Optional Endpoints:**
+**Optional Methods:**
 
-- `POST /modify-plan` - Modify Terraform plans
+- `modifyPlan` - Modify Terraform plans
 
 **Configuration:**
 
@@ -284,10 +268,9 @@ resource "denobridge_resource" "example" {
 
 Read-only data fetching for Terraform data sources.
 
-**Required Endpoints:**
+**Required Methods:**
 
-- `GET /health` - Health check
-- `POST /read` - Fetch data
+- `read` - Fetch data
 
 **Configuration:**
 
@@ -309,15 +292,14 @@ data "denobridge_datasource" "example" {
 
 Short-lived resources that exist only during Terraform operations.
 
-**Required Endpoints:**
+**Required Methods:**
 
-- `GET /health` - Health check
-- `POST /open` - Open/create the ephemeral resource
+- `open` - Open/create the ephemeral resource
 
-**Optional Endpoints:**
+**Optional Methods:**
 
-- `POST /renew` - Renew expiring resources
-- `POST /close` - Clean up when no longer needed
+- `renew` - Renew expiring resources
+- `close` - Clean up when no longer needed
 
 **Configuration:**
 
@@ -339,10 +321,9 @@ ephemeral "denobridge_ephemeral_resource" "example" {
 
 Operations that don't manage resources but perform actions.
 
-**Required Endpoints:**
+**Required Methods:**
 
-- `GET /health` - Health check
-- `POST /invoke` - Execute the action (with streaming progress)
+- `invoke` - Execute the action (with streaming progress notifications)
 
 **Configuration:**
 
@@ -418,14 +399,25 @@ See [Deno's permission documentation](https://docs.deno.com/runtime/fundamentals
 
 ## API Documentation
 
-Detailed OpenAPI specifications for each resource type are available in the [docs](docs/) directory:
+Detailed JSON-RPC 2.0 protocol documentation is available in the [docs/guides](docs/guides/) directory:
 
-- [denobridge_resource.yaml](docs/denobridge_resource.yaml) - Full resource lifecycle
-- [denobridge_datasource.yaml](docs/denobridge_datasource.yaml) - Data sources
-- [denobridge_ephemeral_resource.yaml](docs/denobridge_ephemeral_resource.yaml) - Ephemeral resources
-- [denobridge_action.yaml](docs/denobridge_action.yaml) - Actions
+- [json-rpc-protocol.md](docs/guides/json-rpc-protocol.md) - Complete JSON-RPC protocol specification
+- [json-rpc-spec.json](docs/guides/json-rpc-spec.json) - OpenRPC schema for all methods
 
-See [docs/README.md](docs/README.md) for comprehensive API documentation and patterns.
+### TypeScript Library
+
+The recommended way to build providers is using the official TypeScript library available on JSR:
+
+```typescript
+import {
+  ActionProvider,
+  DatasourceProvider,
+  EphemeralResourceProvider,
+  ResourceProvider,
+} from "jsr:@brad-jones/terraform-provider-denobridge";
+```
+
+The library handles all JSON-RPC communication, health checks, and protocol details automatically.
 
 ## Development
 
@@ -466,15 +458,17 @@ task run:example
 
 1. **Provider Initialization**: When Terraform/OpenTofu calls the provider, it reads your TypeScript file path and permissions configuration.
 
-2. **Deno Server Start**: The provider automatically downloads (if needed) and starts Deno, running your TypeScript file as an HTTP server on a random port.
+2. **Deno Process Start**: The provider automatically downloads (if needed) and starts Deno, running your TypeScript file as a child process.
 
-3. **Health Check**: The provider polls the `/health` endpoint until your server is ready.
+3. **JSON-RPC Communication**: The provider communicates with the Deno process via JSON-RPC 2.0 messages over stdin/stdout.
 
-4. **Lifecycle Management**: The provider calls appropriate endpoints (`/create`, `/read`, `/update`, `/delete`, etc.) based on Terraform operations.
+4. **Health Check**: The provider sends a `health` method call to verify the process is responsive.
 
-5. **JSON Communication**: All data is exchanged via JSON, making it easy to work with in TypeScript.
+5. **Lifecycle Management**: The provider invokes appropriate JSON-RPC methods (`create`, `read`, `update`, `delete`, etc.) based on Terraform operations.
 
-6. **Cleanup**: When Terraform completes, the provider shuts down the Deno server.
+6. **Type-Safe Development**: Using the TypeScript library from JSR, you implement type-safe handler functions that the library wires up to the JSON-RPC protocol.
+
+7. **Cleanup**: When Terraform completes, the provider gracefully shuts down the Deno process.
 
 ## Use Cases
 
@@ -493,7 +487,7 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 
 - [Terraform Plugin Framework](https://github.com/hashicorp/terraform-plugin-framework)
 - [Deno](https://github.com/denoland/deno)
-- [Hono](https://hono.dev/) - Recommended web framework for building endpoints
+- [@brad-jones/terraform-provider-denobridge](https://jsr.io/@brad-jones/terraform-provider-denobridge) - Official TypeScript library on JSR
 
 ## Acknowledgments
 
