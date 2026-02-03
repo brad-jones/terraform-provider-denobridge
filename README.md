@@ -16,7 +16,7 @@ _Bridge the infrastructure-as-code world with the TypeScript ecosystem_
 
 ## 🌟 Overview
 
-**Deno Tofu Bridge** allows you to implement Terraform provider logic in **TypeScript** instead of Go.
+This terraform provider allows you to implement Terraform provider logic in **TypeScript** instead of Go.
 
 Your TypeScript code runs as a Deno process, and the provider communicates with it via a JSON-RPC 2.0 protocol over stdin/stdout. This approach combines the **safety** 🔒 and **simplicity** ✨ of Deno with the **power** ⚡ of Terraform's infrastructure management.
 
