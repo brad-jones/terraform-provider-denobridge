@@ -1,4 +1,4 @@
-import type { JSONRPCClient, JSONRPCMethods } from "@yieldray/json-rpc-ts";
+import type { JSONRPCClient, JSONRPCMethod, JSONRPCMethods } from "@yieldray/json-rpc-ts";
 import { createJSocket } from "../jsocket.ts";
 
 /**
@@ -27,16 +27,37 @@ export class BaseJsonRpcProvider<RemoteMethods extends JSONRPCMethods = JSONRPCM
     }
 
     const socket = createJSocket<RemoteMethods>(Deno.stdin, Deno.stdout, { debugLogging })(
-      (client) => ({
-        ...providerMethods(client),
-        health() {
-          return { ok: true };
-        },
-        shutdown() {
-          console.error("Shutting down gracefully...");
-          socket[Symbol.asyncDispose]();
-        },
-      }),
+      (client) =>
+        wrapMethods({
+          ...providerMethods(client),
+          health() {
+            return { ok: true };
+          },
+          shutdown() {
+            console.error("Shutting down gracefully...");
+            socket[Symbol.asyncDispose]();
+          },
+        }),
     );
   }
+}
+
+function wrapMethod<T, U>(fn: JSONRPCMethod<T, U>): JSONRPCMethod<T, U> {
+  return async (arg) => {
+    try {
+      return await fn(arg);
+    } catch (e) {
+      console.error("uncaught error", e);
+      throw e;
+    }
+  };
+}
+
+function wrapMethods(methods: JSONRPCMethods): JSONRPCMethods {
+  return Object.fromEntries(
+    Object.entries(methods).map(([name, fn]) => [
+      name,
+      typeof fn === "function" ? wrapMethod(fn.bind(methods)) : fn,
+    ]),
+  );
 }
