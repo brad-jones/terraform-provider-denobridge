@@ -1,5 +1,6 @@
 import type { z } from "@zod/zod";
 import { BaseJsonRpcProvider } from "./base.ts";
+import { type Diagnostics, isDiagnostics } from "./diagnostics.ts";
 
 /**
  * Defines the methods that must be implemented by an action provider.
@@ -12,7 +13,7 @@ export type ActionProviderMethods<TProps> = {
    * @param progressCallback - A callback function to report progress messages during action execution.
    * @returns A promise that resolves when the action completes.
    */
-  invoke(props: TProps, progressCallback: (message: string) => Promise<void>): Promise<void>;
+  invoke(props: TProps, progressCallback: (message: string) => Promise<void>): Promise<Diagnostics | void>;
 };
 
 /**
@@ -39,10 +40,11 @@ export class ActionProvider<TProps> extends BaseJsonRpcProvider<RemoteMethods> {
   constructor(providerMethods: ActionProviderMethods<TProps>) {
     super((client) => ({
       async invoke(params: { props: Record<string, unknown> }) {
-        await providerMethods.invoke(
+        const result = await providerMethods.invoke(
           params.props as TProps,
           (message: string) => client.notify("invokeProgress", { message }),
         );
+        if (isDiagnostics(result)) return result;
         return { done: true };
       },
     }));
@@ -68,7 +70,24 @@ export class ZodActionProvider<
   ) {
     super({
       async invoke(props, progressCallback) {
-        await providerMethods.invoke(propsSchema.parse(props), progressCallback);
+        // Validate props
+        const propsParsed = propsSchema.safeParse(props);
+        if (!propsParsed.success) {
+          return {
+            diagnostics: propsParsed.error.issues.map((i) => ({
+              severity: "error",
+              summary: "Zod Validation Issue",
+              detail: i.message,
+              propPath: i.path.length > 0 ? ["props", ...i.path.map((_) => String(_))] : undefined,
+            })),
+          };
+        }
+
+        // Call the method with validated props
+        const result = await providerMethods.invoke(propsParsed.data, progressCallback);
+
+        // Catch any diagnostics and return them early
+        if (isDiagnostics(result)) return result;
       },
     });
   }

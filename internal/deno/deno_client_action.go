@@ -51,6 +51,17 @@ type InvokeRequest struct {
 type InvokeResponse struct {
 	// Done indicates whether the action invocation completed successfully
 	Done bool `json:"done"`
+	// Diagnostics contains any warnings or errors to display to the user
+	Diagnostics *[]struct {
+		// Severity indicates the diagnostic level ("error" or "warning")
+		Severity string `json:"severity"`
+		// Summary is a short description of the diagnostic
+		Summary string `json:"summary"`
+		// Detail provides additional context about the diagnostic
+		Detail string `json:"detail"`
+		// PropPath optionally specifies which property the diagnostic relates to
+		PropPath *[]string `json:"propPath,omitempty"`
+	} `json:"diagnostics,omitempty"`
 }
 
 // Invoke executes the Terraform action by calling the "invoke" method via JSON-RPC.
@@ -61,15 +72,12 @@ type InvokeResponse struct {
 //   - params: The invoke request containing the action properties
 //
 // Returns an error if the JSON-RPC call fails or the action does not complete successfully.
-func (c *DenoClientAction) Invoke(ctx context.Context, params *InvokeRequest) error {
+func (c *DenoClientAction) Invoke(ctx context.Context, params *InvokeRequest) (*InvokeResponse, error) {
 	var response *InvokeResponse
 	if err := c.Client.Socket.Call(ctx, "invoke", params, &response); err != nil {
-		return fmt.Errorf("failed to call invoke method over JSON-RPC: %v", err)
+		return nil, fmt.Errorf("failed to call invoke method over JSON-RPC: %v", err)
 	}
-	if !response.Done {
-		return fmt.Errorf("invoke call not done")
-	}
-	return nil
+	return response, nil
 }
 
 // DenoClientActionServerMethods implements the server-side JSON-RPC methods that

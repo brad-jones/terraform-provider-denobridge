@@ -52,6 +52,17 @@ type CreateResponse struct {
 	ID string `json:"id"`
 	// State contains the resource's state data to be stored in Terraform state
 	State any `json:"state"`
+	// Diagnostics contains any warnings or errors to display to the user
+	Diagnostics *[]struct {
+		// Severity indicates the diagnostic level ("error" or "warning")
+		Severity string `json:"severity"`
+		// Summary is a short description of the diagnostic
+		Summary string `json:"summary"`
+		// Detail provides additional context about the diagnostic
+		Detail string `json:"detail"`
+		// PropPath optionally specifies which property the diagnostic relates to
+		PropPath *[]string `json:"propPath,omitempty"`
+	} `json:"diagnostics,omitempty"`
 }
 
 // Create executes the resource creation operation by calling the "create" method via JSON-RPC.
@@ -88,6 +99,17 @@ type CreateReadResponse struct {
 	State *any `json:"state"`
 	// Exists indicates whether the resource still exists in the external system
 	Exists *bool `json:"exists"`
+	// Diagnostics contains any warnings or errors to display to the user
+	Diagnostics *[]struct {
+		// Severity indicates the diagnostic level ("error" or "warning")
+		Severity string `json:"severity"`
+		// Summary is a short description of the diagnostic
+		Summary string `json:"summary"`
+		// Detail provides additional context about the diagnostic
+		Detail string `json:"detail"`
+		// PropPath optionally specifies which property the diagnostic relates to
+		PropPath *[]string `json:"propPath,omitempty"`
+	} `json:"diagnostics,omitempty"`
 }
 
 // Read executes the resource read operation by calling the "read" method via JSON-RPC.
@@ -124,6 +146,17 @@ type UpdateRequest struct {
 type UpdateResponse struct {
 	// State contains the updated resource state data after the update operation
 	State *any `json:"state"`
+	// Diagnostics contains any warnings or errors to display to the user
+	Diagnostics *[]struct {
+		// Severity indicates the diagnostic level ("error" or "warning")
+		Severity string `json:"severity"`
+		// Summary is a short description of the diagnostic
+		Summary string `json:"summary"`
+		// Detail provides additional context about the diagnostic
+		Detail string `json:"detail"`
+		// PropPath optionally specifies which property the diagnostic relates to
+		PropPath *[]string `json:"propPath,omitempty"`
+	} `json:"diagnostics,omitempty"`
 }
 
 // Update executes the resource update operation by calling the "update" method via JSON-RPC.
@@ -151,6 +184,17 @@ type DeleteRequest struct {
 	Props any `json:"props"`
 	// State contains the resource state data
 	State any `json:"state"`
+	// Diagnostics contains any warnings or errors to display to the user
+	Diagnostics *[]struct {
+		// Severity indicates the diagnostic level ("error" or "warning")
+		Severity string `json:"severity"`
+		// Summary is a short description of the diagnostic
+		Summary string `json:"summary"`
+		// Detail provides additional context about the diagnostic
+		Detail string `json:"detail"`
+		// PropPath optionally specifies which property the diagnostic relates to
+		PropPath *[]string `json:"propPath,omitempty"`
+	} `json:"diagnostics,omitempty"`
 }
 
 // DeleteResponse represents the response from deleting a Terraform resource.
@@ -158,6 +202,17 @@ type DeleteRequest struct {
 type DeleteResponse struct {
 	// Done indicates whether the delete operation completed successfully
 	Done bool `json:"done"`
+	// Diagnostics contains any warnings or errors to display to the user
+	Diagnostics *[]struct {
+		// Severity indicates the diagnostic level ("error" or "warning")
+		Severity string `json:"severity"`
+		// Summary is a short description of the diagnostic
+		Summary string `json:"summary"`
+		// Detail provides additional context about the diagnostic
+		Detail string `json:"detail"`
+		// PropPath optionally specifies which property the diagnostic relates to
+		PropPath *[]string `json:"propPath,omitempty"`
+	} `json:"diagnostics,omitempty"`
 }
 
 // Delete executes the resource deletion operation by calling the "delete" method via JSON-RPC.
@@ -168,15 +223,12 @@ type DeleteResponse struct {
 //   - params: The delete request containing the resource ID, properties, and state
 //
 // Returns an error if the JSON-RPC call fails or the delete operation is not complete.
-func (c *DenoClientResource) Delete(ctx context.Context, params *DeleteRequest) error {
+func (c *DenoClientResource) Delete(ctx context.Context, params *DeleteRequest) (*DeleteResponse, error) {
 	var response *DeleteResponse
 	if err := c.Client.Socket.Call(ctx, "delete", params, &response); err != nil {
-		return fmt.Errorf("failed to call delete method over JSON-RPC: %v", err)
+		return nil, fmt.Errorf("failed to call delete method over JSON-RPC: %v", err)
 	}
-	if !response.Done {
-		return fmt.Errorf("delete not done")
-	}
-	return nil
+	return response, nil
 }
 
 // ModifyPlanRequest represents the request payload for modifying a Terraform plan.
@@ -211,8 +263,8 @@ type ModifyPlanResponse struct {
 		Summary string `json:"summary"`
 		// Detail provides additional context about the diagnostic
 		Detail string `json:"detail"`
-		// PropName optionally specifies which property the diagnostic relates to
-		PropName *string `json:"propName,omitempty"`
+		// PropPath optionally specifies which property the diagnostic relates to
+		PropPath *[]string `json:"propPath,omitempty"`
 	} `json:"diagnostics,omitempty"`
 }
 

@@ -66,7 +66,7 @@ func (r *denoBridgeResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"props": schema.DynamicAttribute{
 				Description: "Input properties to pass to the Deno script.",
-				Optional:    true,
+				Required:    true,
 			},
 			"state": schema.DynamicAttribute{
 				Description: "Additional computed state of the resource as returned by the Deno script.",
@@ -156,6 +156,31 @@ func (r *denoBridgeResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
+	// Handle diagnostics - allows the script to add warnings or errors
+	if response.Diagnostics != nil {
+		fatal := false
+		for _, diag := range *response.Diagnostics {
+			switch diag.Severity {
+			case "error":
+				fatal = true
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeError(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddError(diag.Summary, diag.Detail)
+				}
+			case "warning":
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeWarning(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddWarning(diag.Summary, diag.Detail)
+				}
+			}
+		}
+		if fatal {
+			return
+		}
+	}
+
 	// Set state
 	plan.ID = types.StringValue(response.ID)
 	if response.State != nil {
@@ -199,6 +224,31 @@ func (r *denoBridgeResource) Read(ctx context.Context, req resource.ReadRequest,
 			fmt.Sprintf("Could not read resource via Deno script: %s", err.Error()),
 		)
 		return
+	}
+
+	// Handle diagnostics - allows the script to add warnings or errors
+	if response.Diagnostics != nil {
+		fatal := false
+		for _, diag := range *response.Diagnostics {
+			switch diag.Severity {
+			case "error":
+				fatal = true
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeError(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddError(diag.Summary, diag.Detail)
+				}
+			case "warning":
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeWarning(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddWarning(diag.Summary, diag.Detail)
+				}
+			}
+		}
+		if fatal {
+			return
+		}
 	}
 
 	if response.Exists != nil && !*response.Exists {
@@ -264,6 +314,31 @@ func (r *denoBridgeResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
+	// Handle diagnostics - allows the script to add warnings or errors
+	if response.Diagnostics != nil {
+		fatal := false
+		for _, diag := range *response.Diagnostics {
+			switch diag.Severity {
+			case "error":
+				fatal = true
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeError(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddError(diag.Summary, diag.Detail)
+				}
+			case "warning":
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeWarning(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddWarning(diag.Summary, diag.Detail)
+				}
+			}
+		}
+		if fatal {
+			return
+		}
+	}
+
 	// Keep the same ID
 	plan.ID = state.ID
 
@@ -302,14 +377,49 @@ func (r *denoBridgeResource) Delete(ctx context.Context, req resource.DeleteRequ
 	}()
 
 	// Call the delete endpoint
-	if err := c.Delete(ctx, &deno.DeleteRequest{
+	response, err := c.Delete(ctx, &deno.DeleteRequest{
 		ID:    state.ID.ValueString(),
 		Props: dynamic.FromDynamic(state.Props),
 		State: dynamic.FromDynamic(state.State),
-	}); err != nil {
+	})
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to delete resource",
 			fmt.Sprintf("Could not delete resource via Deno script: %s", err.Error()),
+		)
+		return
+	}
+
+	// Handle diagnostics - allows the script to add warnings or errors
+	if response.Diagnostics != nil {
+		fatal := false
+		for _, diag := range *response.Diagnostics {
+			switch diag.Severity {
+			case "error":
+				fatal = true
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeError(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddError(diag.Summary, diag.Detail)
+				}
+			case "warning":
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeWarning(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddWarning(diag.Summary, diag.Detail)
+				}
+			}
+		}
+		if fatal {
+			return
+		}
+	}
+
+	// Double check that the operation actually completed
+	if !response.Done {
+		resp.Diagnostics.AddError(
+			"Failed to delete resource",
+			"Deno script did not report the operation as done",
 		)
 		return
 	}
@@ -425,36 +535,41 @@ func (r *denoBridgeResource) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
+	// Handle requiresReplacement - instructing tf to do a create then delete instead of an update
+	if response.RequiresReplacement != nil && *response.RequiresReplacement {
+		resp.RequiresReplace = append(resp.RequiresReplace, path.Root("props"))
+		return
+	}
+
 	// Handle modified props - allows the script to modify the planned properties
 	if response.ModifiedProps != nil {
 		plan.Props = dynamic.ToDynamic(response.ModifiedProps)
 		resp.Diagnostics.Append(resp.Plan.Set(ctx, plan)...)
-	}
-
-	// Handle requiresReplacement - instructing tf to do a create then delete instead of an update
-	if response.RequiresReplacement != nil && *response.RequiresReplacement {
-		resp.RequiresReplace = append(resp.RequiresReplace, path.Root("props"))
+		return
 	}
 
 	// Handle diagnostics - allows the script to add warnings or errors
-	// Mainly for use with the Resource Destroy Plan Diagnostics workflow.
-	// see: https://developer.hashicorp.com/terraform/plugin/framework/resources/plan-modification#resource-destroy-plan-diagnostics
 	if response.Diagnostics != nil {
+		fatal := false
 		for _, diag := range *response.Diagnostics {
 			switch diag.Severity {
 			case "error":
-				if diag.PropName != nil {
-					resp.Diagnostics.AddAttributeError(path.Root("props").AtMapKey(*diag.PropName), diag.Summary, diag.Detail)
+				fatal = true
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeError(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
 				} else {
 					resp.Diagnostics.AddError(diag.Summary, diag.Detail)
 				}
 			case "warning":
-				if diag.PropName != nil {
-					resp.Diagnostics.AddAttributeWarning(path.Root("props").AtMapKey(*diag.PropName), diag.Summary, diag.Detail)
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeWarning(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
 				} else {
 					resp.Diagnostics.AddWarning(diag.Summary, diag.Detail)
 				}
 			}
+		}
+		if fatal {
+			return
 		}
 	}
 }

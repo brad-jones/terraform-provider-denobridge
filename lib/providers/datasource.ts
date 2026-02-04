@@ -1,5 +1,6 @@
 import type { z } from "@zod/zod";
 import { BaseJsonRpcProvider } from "./base.ts";
+import { type Diagnostics, isDiagnostics } from "./diagnostics.ts";
 
 /**
  * Defines the methods that must be implemented by a datasource provider.
@@ -13,7 +14,7 @@ export interface DatasourceProviderMethods<TProps, TResult> {
    * @param props - The properties/configuration for the datasource read operation.
    * @returns A promise that resolves to the data fetched from the datasource.
    */
-  read(props: TProps): Promise<TResult>;
+  read(props: TProps): Promise<Diagnostics | TResult>;
 }
 
 /**
@@ -30,7 +31,9 @@ export class DatasourceProvider<TProps, TResult> extends BaseJsonRpcProvider {
   constructor(providerMethods: DatasourceProviderMethods<TProps, TResult>) {
     super(() => ({
       async read(params: { props: unknown }) {
-        return { result: await providerMethods.read(params.props as TProps) };
+        const result = await providerMethods.read(params.props as TProps);
+        if (isDiagnostics(result)) return result;
+        return { result };
       },
     }));
   }
@@ -57,11 +60,39 @@ export class ZodDatasourceProvider<TProps extends z.ZodType, TResult extends z.Z
   ) {
     super({
       async read(props) {
-        return resultSchema.parse(
-          await providerMethods.read(
-            propsSchema.parse(props),
-          ),
-        );
+        // Validate props
+        const propsParsed = propsSchema.safeParse(props);
+        if (!propsParsed.success) {
+          return {
+            diagnostics: propsParsed.error.issues.map((i) => ({
+              severity: "error",
+              summary: "Zod Validation Issue",
+              detail: i.message,
+              propPath: i.path.length > 0 ? ["props", ...i.path.map((_) => String(_))] : undefined,
+            })),
+          };
+        }
+
+        // Call the method with validated props
+        const result = await providerMethods.read(propsParsed.data);
+
+        // Catch any diagnostics and return them early
+        if (isDiagnostics(result)) return result;
+
+        // Validate the results
+        const resultParsed = resultSchema.safeParse(result);
+        if (!resultParsed.success) {
+          return {
+            diagnostics: resultParsed.error.issues.map((i) => ({
+              severity: "error",
+              summary: "Zod Validation Issue",
+              detail: i.message,
+              propPath: i.path.length > 0 ? ["result", ...i.path.map((_) => String(_))] : undefined,
+            })),
+          };
+        }
+
+        return resultParsed.data;
       },
     });
   }

@@ -1,6 +1,7 @@
 import { JSONRPCMethodNotFoundError } from "@yieldray/json-rpc-ts";
 import type { z } from "@zod/zod";
 import { BaseJsonRpcProvider } from "./base.ts";
+import { type Diagnostics, isDiagnostics } from "./diagnostics.ts";
 
 /**
  * Defines the methods that must be implemented by an ephemeral resource provider.
@@ -17,31 +18,37 @@ export type EphemeralResourceProviderMethods<TProps, TResult, TPrivateData = nev
    * @returns A promise that resolves to an object containing the result data, an optional
    *          renewal timestamp, and optional private data to maintain between operations.
    */
-  open(props: TProps): Promise<{
-    result: TResult;
-    /** Unix timestamp (in seconds) indicating when the resource should be renewed. */
-    renewAt?: number;
-    /** Private data to maintain between lifecycle operations (open, renew, close). */
-    privateData?: TPrivateData;
-  }>;
+  open(props: TProps): Promise<
+    Diagnostics | {
+      result: TResult;
+      /** Unix timestamp (in seconds) indicating when the resource should be renewed. */
+      renewAt?: number;
+      /** Private data to maintain between lifecycle operations (open, renew, close). */
+      privateData?: TPrivateData;
+    }
+  >;
+
   /**
    * Renews an existing ephemeral resource. This method is optional.
    * @param privateData - The private data from the previous open or renew operation.
    * @returns A promise that resolves to an object containing an optional renewal timestamp
    *          and updated private data.
    */
-  renew?(privateData: TPrivateData): Promise<{
-    /** Unix timestamp (in seconds) indicating when the resource should be renewed again. */
-    renewAt?: number;
-    /** Updated private data to maintain for subsequent operations. */
-    privateData?: TPrivateData;
-  }>;
+  renew?(privateData: TPrivateData): Promise<
+    Diagnostics | {
+      /** Unix timestamp (in seconds) indicating when the resource should be renewed again. */
+      renewAt?: number;
+      /** Updated private data to maintain for subsequent operations. */
+      privateData?: TPrivateData;
+    }
+  >;
+
   /**
    * Closes an ephemeral resource and cleans up any associated resources. This method is optional.
    * @param privateData - The private data from the previous open or renew operation.
    * @returns A promise that resolves when the resource is closed.
    */
-  close?(privateData: TPrivateData): Promise<void>;
+  close?(privateData: TPrivateData): Promise<Diagnostics | void>;
 };
 
 /**
@@ -62,16 +69,13 @@ export class EphemeralResourceProvider<TProps, TResult, TPrivateData = never> ex
         return await providerMethods.open(params.props as TProps);
       },
       async renew(params: { privateData: TPrivateData }) {
-        if (!providerMethods.renew) {
-          throw new JSONRPCMethodNotFoundError();
-        }
+        if (!providerMethods.renew) throw new JSONRPCMethodNotFoundError();
         return await providerMethods.renew(params.privateData);
       },
       async close(params: { privateData: TPrivateData }) {
-        if (!providerMethods.close) {
-          throw new JSONRPCMethodNotFoundError();
-        }
-        return await providerMethods.close(params.privateData);
+        if (!providerMethods.close) throw new JSONRPCMethodNotFoundError();
+        const result = await providerMethods.close(params.privateData);
+        if (isDiagnostics(result)) return result;
       },
     }));
   }
@@ -105,28 +109,122 @@ export class ZodEphemeralResourceProvider<
     const validatedMethods: EphemeralResourceProviderMethods<z.infer<TProps>, z.infer<TResult>, z.infer<TPrivateData>> =
       {
         async open(props) {
-          const result = await providerMethods.open(propsSchema.parse(props));
+          // Validate props
+          const propsParsed = propsSchema.safeParse(props);
+          if (!propsParsed.success) {
+            return {
+              diagnostics: propsParsed.error.issues.map((i) => ({
+                severity: "error",
+                summary: "Zod Validation Issue",
+                detail: i.message,
+                propPath: i.path.length > 0 ? ["props", ...i.path.map((_) => String(_))] : undefined,
+              })),
+            };
+          }
+
+          // Call the method with validated props
+          const result = await providerMethods.open(propsParsed.data);
+
+          // Catch any diagnostics and return them early
+          if (isDiagnostics(result)) return result;
+
+          // Validate the results
+          const resultParsed = resultSchema.safeParse(result.result);
+          const privateDataParsed = result.privateData ? privateDataSchema.safeParse(result.privateData) : null;
+          if (!resultParsed.success || privateDataParsed?.success === false) {
+            return {
+              diagnostics: [
+                ...(!resultParsed.success
+                  ? resultParsed.error.issues.map((i) => ({
+                    severity: "error",
+                    summary: "Zod Validation Issue",
+                    detail: i.message,
+                    propPath: i.path.length > 0 ? ["result", ...i.path.map((_) => String(_))] : undefined,
+                  }))
+                  : []),
+                ...(privateDataParsed?.success === false
+                  ? privateDataParsed.error.issues.map((i) => ({
+                    severity: "error",
+                    summary: "Zod Validation Issue",
+                    detail: i.message,
+                  }))
+                  : []),
+              ],
+            } as Diagnostics;
+          }
+
           return {
             ...result,
-            result: resultSchema.parse(result.result),
-            privateData: privateDataSchema.parse(result.privateData),
+            result: resultParsed.data,
+            ...(privateDataParsed ? { privateData: privateDataParsed.data } : {}),
           };
         },
       };
 
     if (providerMethods.renew) {
       validatedMethods["renew"] = async (privateData) => {
-        const result = await providerMethods.renew!(privateDataSchema.parse(privateData));
+        // Validate privateData
+        const privateDataParsed = privateData ? privateDataSchema.safeParse(privateData) : null;
+        if (privateDataParsed?.success === false) {
+          return {
+            diagnostics: privateDataParsed.error.issues.map((i) => ({
+              severity: "error",
+              summary: "Zod Validation Issue",
+              detail: i.message,
+            })),
+          };
+        }
+
+        // Call the method with validated privateData
+        const result = await providerMethods.renew!(
+          // deno-lint-ignore no-explicit-any
+          privateDataParsed ? privateDataParsed?.data : undefined as any,
+        );
+
+        // Catch any diagnostics and return them early
+        if (isDiagnostics(result)) return result;
+
+        // Validate updated private data
+        const updatedPrivateData = result.privateData ? privateDataSchema.safeParse(result.privateData) : null;
+        if (updatedPrivateData?.success === false) {
+          return {
+            diagnostics: updatedPrivateData.error.issues.map((i) => ({
+              severity: "error",
+              summary: "Zod Validation Issue",
+              detail: i.message,
+            })),
+          };
+        }
+
         return {
           ...result,
-          privateData: privateDataSchema.parse(result.privateData),
+          ...(updatedPrivateData ? { privateData: updatedPrivateData.data } : {}),
         };
       };
     }
 
     if (providerMethods.close) {
       validatedMethods["close"] = async (privateData) => {
-        await providerMethods.close!(privateDataSchema.parse(privateData));
+        // Validate privateData
+        const privateDataParsed = privateData ? privateDataSchema.safeParse(privateData) : null;
+        if (privateDataParsed?.success === false) {
+          return {
+            diagnostics: privateDataParsed.error.issues.map((i) => ({
+              severity: "error",
+              summary: "Zod Validation Issue",
+              detail: i.message,
+            })),
+          };
+        }
+
+        // Call the method with validated privateData
+        const result = await providerMethods.close!(
+          // deno-lint-ignore no-explicit-any
+          privateDataParsed ? privateDataParsed?.data : undefined as any,
+        );
+
+        // Catch any diagnostics and return them early
+        if (isDiagnostics(result)) return result;
       };
     }
 

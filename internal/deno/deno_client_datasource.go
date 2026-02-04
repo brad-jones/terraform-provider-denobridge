@@ -47,6 +47,17 @@ type ReadRequest struct {
 type ReadResponse struct {
 	// Result contains the data returned by the data source, which will be stored in Terraform state
 	Result any `json:"result"`
+	// Diagnostics contains any warnings or errors to display to the user
+	Diagnostics *[]struct {
+		// Severity indicates the diagnostic level ("error" or "warning")
+		Severity string `json:"severity"`
+		// Summary is a short description of the diagnostic
+		Summary string `json:"summary"`
+		// Detail provides additional context about the diagnostic
+		Detail string `json:"detail"`
+		// PropPath optionally specifies which property the diagnostic relates to
+		PropPath *[]string `json:"propPath,omitempty"`
+	} `json:"diagnostics,omitempty"`
 }
 
 // Read executes the data source read operation by calling the "read" method via JSON-RPC.

@@ -52,7 +52,7 @@ func (d *denoBridgeDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 			},
 			"props": schema.DynamicAttribute{
 				Description: "Input properties to pass to the Deno script.",
-				Optional:    true,
+				Required:    true,
 			},
 			"result": schema.DynamicAttribute{
 				Description: "Output data returned from the Deno script.",
@@ -139,6 +139,31 @@ func (d *denoBridgeDataSource) Read(ctx context.Context, req datasource.ReadRequ
 			"Failed to read data",
 			fmt.Sprintf("Could not read data from Deno script: %s", err.Error()),
 		)
+	}
+
+	// Handle diagnostics - allows the script to add warnings or errors
+	if response.Diagnostics != nil {
+		fatal := false
+		for _, diag := range *response.Diagnostics {
+			switch diag.Severity {
+			case "error":
+				fatal = true
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeError(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddError(diag.Summary, diag.Detail)
+				}
+			case "warning":
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeWarning(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddWarning(diag.Summary, diag.Detail)
+				}
+			}
+		}
+		if fatal {
+			return
+		}
 	}
 
 	// Set state

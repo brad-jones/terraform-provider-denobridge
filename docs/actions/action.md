@@ -53,12 +53,12 @@ action "denobridge_action" "launch_rocket" {
 ### Required
 
 - `path` (String) Path to the Deno script to execute.
+- `props` (Dynamic) Input properties to pass to the Deno script.
 
 ### Optional
 
 - `config_file` (String) File path to a deno config file to use with the deno script. Useful for import maps, etc...
 - `permissions` (Attributes) Deno runtime permissions for the script. (see [below for nested schema](#nestedatt--permissions))
-- `props` (Dynamic) Input properties to pass to the Deno script.
 
 <a id="nestedatt--permissions"></a>
 

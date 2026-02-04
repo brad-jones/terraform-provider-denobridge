@@ -1,11 +1,16 @@
 import { EphemeralResourceProvider } from "@brad-jones/terraform-provider-denobridge";
 
+interface Props {
+  type: "v4";
+}
+
 interface Result {
   uuid: string;
 }
 
-new EphemeralResourceProvider<undefined, Result>({
-  open(_props) {
+new EphemeralResourceProvider<Props, Result>({
+  open({ type }) {
+    if (type !== "v4") throw new Error(`unsupported uuid type`);
     return Promise.resolve({ result: { uuid: crypto.randomUUID() } });
   },
 });

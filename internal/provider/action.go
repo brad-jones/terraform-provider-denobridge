@@ -49,7 +49,7 @@ func (a *denoBridgeAction) Schema(_ context.Context, _ action.SchemaRequest, res
 			},
 			"props": schema.DynamicAttribute{
 				Description: "Input properties to pass to the Deno script.",
-				Optional:    true,
+				Required:    true,
 			},
 			"config_file": schema.StringAttribute{
 				Description: "File path to a deno config file to use with the deno script. Useful for import maps, etc...",
@@ -124,8 +124,43 @@ func (a *denoBridgeAction) Invoke(ctx context.Context, req action.InvokeRequest,
 	}()
 
 	// Call the invoke JSON-RPC method
-	if err := c.Invoke(ctx, &deno.InvokeRequest{Props: dynamic.FromDynamic(data.Props)}); err != nil {
+	response, err := c.Invoke(ctx, &deno.InvokeRequest{Props: dynamic.FromDynamic(data.Props)})
+	if err != nil {
 		resp.Diagnostics.AddError("Failed to invoke action", err.Error())
+		return
+	}
+
+	// Handle diagnostics - allows the script to add warnings or errors
+	if response.Diagnostics != nil {
+		fatal := false
+		for _, diag := range *response.Diagnostics {
+			switch diag.Severity {
+			case "error":
+				fatal = true
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeError(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddError(diag.Summary, diag.Detail)
+				}
+			case "warning":
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeWarning(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddWarning(diag.Summary, diag.Detail)
+				}
+			}
+		}
+		if fatal {
+			return
+		}
+	}
+
+	// Double check that the operation actually completed
+	if !response.Done {
+		resp.Diagnostics.AddError(
+			"Failed to complete action",
+			"Deno script did not report the operation as done",
+		)
 		return
 	}
 }

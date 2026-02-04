@@ -54,7 +54,7 @@ func (r *denoBridgeEphemeralResource) Schema(_ context.Context, _ ephemeral.Sche
 			},
 			"props": schema.DynamicAttribute{
 				Description: "Input properties to pass to the Deno script.",
-				Optional:    true,
+				Required:    true,
 			},
 			"result": schema.DynamicAttribute{
 				Description: "Output data returned from the Deno script.",
@@ -139,6 +139,31 @@ func (r *denoBridgeEphemeralResource) Open(ctx context.Context, req ephemeral.Op
 			"Failed to open data",
 			fmt.Sprintf("Could not open data from Deno script: %s", err.Error()),
 		)
+	}
+
+	// Handle diagnostics - allows the script to add warnings or errors
+	if response.Diagnostics != nil {
+		fatal := false
+		for _, diag := range *response.Diagnostics {
+			switch diag.Severity {
+			case "error":
+				fatal = true
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeError(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddError(diag.Summary, diag.Detail)
+				}
+			case "warning":
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeWarning(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddWarning(diag.Summary, diag.Detail)
+				}
+			}
+		}
+		if fatal {
+			return
+		}
 	}
 
 	// Set a renew time if provided
@@ -247,6 +272,31 @@ func (r *denoBridgeEphemeralResource) Renew(ctx context.Context, req ephemeral.R
 		return
 	}
 
+	// Handle diagnostics - allows the script to add warnings or errors
+	if response.Diagnostics != nil {
+		fatal := false
+		for _, diag := range *response.Diagnostics {
+			switch diag.Severity {
+			case "error":
+				fatal = true
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeError(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddError(diag.Summary, diag.Detail)
+				}
+			case "warning":
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeWarning(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddWarning(diag.Summary, diag.Detail)
+				}
+			}
+		}
+		if fatal {
+			return
+		}
+	}
+
 	// Set a new renew time if provided
 	if response.RenewAt != nil {
 		resp.RenewAt = time.Unix(*response.RenewAt, 0)
@@ -324,10 +374,50 @@ func (r *denoBridgeEphemeralResource) Close(ctx context.Context, req ephemeral.C
 	}()
 
 	// Call the close endpoint
-	if err := c.Close(ctx, &deno.CloseRequest{Private: privateData}); err != nil {
+	response, err := c.Close(ctx, &deno.CloseRequest{Private: privateData})
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to close",
 			fmt.Sprintf("Could not close data from Deno script: %s", err.Error()),
+		)
+		return
+	}
+
+	// The close method is optional
+	if response == nil {
+		return
+	}
+
+	// Handle diagnostics - allows the script to add warnings or errors
+	if response.Diagnostics != nil {
+		fatal := false
+		for _, diag := range *response.Diagnostics {
+			switch diag.Severity {
+			case "error":
+				fatal = true
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeError(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddError(diag.Summary, diag.Detail)
+				}
+			case "warning":
+				if diag.PropPath != nil {
+					resp.Diagnostics.AddAttributeWarning(dynamic.PropPathToPath(diag.PropPath), diag.Summary, diag.Detail)
+				} else {
+					resp.Diagnostics.AddWarning(diag.Summary, diag.Detail)
+				}
+			}
+		}
+		if fatal {
+			return
+		}
+	}
+
+	// Double check that the operation actually completed
+	if !response.Done {
+		resp.Diagnostics.AddError(
+			"Failed to close resource",
+			"Deno script did not report the operation as done",
 		)
 		return
 	}

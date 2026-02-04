@@ -54,6 +54,17 @@ type OpenResponse struct {
 	RenewAt *int64 `json:"renewAt,omitempty"`
 	// Private is optional private state data that will be passed to subsequent renew and close calls
 	Private *any `json:"privateData,omitempty"`
+	// Diagnostics contains any warnings or errors to display to the user
+	Diagnostics *[]struct {
+		// Severity indicates the diagnostic level ("error" or "warning")
+		Severity string `json:"severity"`
+		// Summary is a short description of the diagnostic
+		Summary string `json:"summary"`
+		// Detail provides additional context about the diagnostic
+		Detail string `json:"detail"`
+		// PropPath optionally specifies which property the diagnostic relates to
+		PropPath *[]string `json:"propPath,omitempty"`
+	} `json:"diagnostics,omitempty"`
 }
 
 // Open executes the ephemeral resource open operation by calling the "open" method via JSON-RPC.
@@ -86,6 +97,17 @@ type RenewResponse struct {
 	RenewAt *int64 `json:"renewAt,omitempty"`
 	// Private is optional updated private state data that will be passed to subsequent renew and close calls
 	Private *any `json:"privateData,omitempty"`
+	// Diagnostics contains any warnings or errors to display to the user
+	Diagnostics *[]struct {
+		// Severity indicates the diagnostic level ("error" or "warning")
+		Severity string `json:"severity"`
+		// Summary is a short description of the diagnostic
+		Summary string `json:"summary"`
+		// Detail provides additional context about the diagnostic
+		Detail string `json:"detail"`
+		// PropPath optionally specifies which property the diagnostic relates to
+		PropPath *[]string `json:"propPath,omitempty"`
+	} `json:"diagnostics,omitempty"`
 }
 
 // Renew executes the ephemeral resource renewal operation by calling the "renew" method via JSON-RPC.
@@ -116,6 +138,17 @@ type CloseRequest struct {
 type CloseResponse struct {
 	// Done indicates whether the close operation completed successfully
 	Done bool `json:"done"`
+	// Diagnostics contains any warnings or errors to display to the user
+	Diagnostics *[]struct {
+		// Severity indicates the diagnostic level ("error" or "warning")
+		Severity string `json:"severity"`
+		// Summary is a short description of the diagnostic
+		Summary string `json:"summary"`
+		// Detail provides additional context about the diagnostic
+		Detail string `json:"detail"`
+		// PropPath optionally specifies which property the diagnostic relates to
+		PropPath *[]string `json:"propPath,omitempty"`
+	} `json:"diagnostics,omitempty"`
 }
 
 // Close executes the ephemeral resource close operation by calling the "close" method via JSON-RPC.
@@ -128,20 +161,17 @@ type CloseResponse struct {
 //
 // Returns an error if the JSON-RPC call fails or the close operation is not complete.
 // Returns nil if the close method is not implemented (CodeMethodNotFound).
-func (c *DenoClientEphemeralResource) Close(ctx context.Context, params *CloseRequest) error {
+func (c *DenoClientEphemeralResource) Close(ctx context.Context, params *CloseRequest) (*CloseResponse, error) {
 	var response *CloseResponse
 	if err := c.Client.Socket.Call(ctx, "close", params, &response); err != nil {
 
 		// Close method is optional - return nil if not implemented
 		var rpcErr *jsonrpc2.Error
 		if errors.As(err, &rpcErr) && rpcErr.Code == jsonrpc2.CodeMethodNotFound {
-			return nil
+			return nil, nil
 		}
 
-		return fmt.Errorf("failed to call close method over JSON-RPC: %v", err)
+		return nil, fmt.Errorf("failed to call close method over JSON-RPC: %v", err)
 	}
-	if !response.Done {
-		return fmt.Errorf("close call not done")
-	}
-	return nil
+	return response, nil
 }

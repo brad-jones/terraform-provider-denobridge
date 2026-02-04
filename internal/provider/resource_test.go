@@ -160,3 +160,154 @@ func TestResource(t *testing.T) {
 		},
 	})
 }
+
+func TestResourceWithZod(t *testing.T) {
+	t.Setenv("TF_ACC", "1")
+	t.Setenv("TF_LOG", "DEBUG")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create test
+			{
+				Config: `
+					resource "denobridge_resource" "test_zod" {
+						path  = "./resource_zod_test.ts"
+						props = {
+							path = "./test_zod.txt"
+							content = "Hello Zod World"
+						}
+						permissions = {
+							all = true
+						}
+					}
+				`,
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("id"),
+						knownvalue.StringExact("./test_zod.txt"),
+					),
+					statecheck.ExpectKnownValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("props").AtMapKey("path"),
+						knownvalue.StringExact("./test_zod.txt"),
+					),
+					statecheck.ExpectKnownValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("props").AtMapKey("content"),
+						knownvalue.StringExact("Hello Zod World"),
+					),
+					statecheck.ExpectKnownValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("state").AtMapKey("mtime"),
+						knownvalue.Int64Func(func(v int64) error {
+							if v > 0 {
+								return nil
+							}
+							return fmt.Errorf("mtime not set")
+						}),
+					),
+				},
+			},
+			// Update in place test
+			{
+				Config: `
+					resource "denobridge_resource" "test_zod" {
+						path  = "./resource_zod_test.ts"
+						props = {
+							path = "./test_zod.txt"
+							content = "Good Bye Zod"
+						}
+						permissions = {
+							all = true
+						}
+					}
+				`,
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("id"),
+						knownvalue.StringExact("./test_zod.txt"),
+					),
+					statecheck.ExpectKnownValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("props").AtMapKey("path"),
+						knownvalue.StringExact("./test_zod.txt"),
+					),
+					statecheck.ExpectKnownValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("props").AtMapKey("content"),
+						knownvalue.StringExact("Good Bye Zod"),
+					),
+					statecheck.ExpectKnownValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("state").AtMapKey("mtime"),
+						knownvalue.Int64Func(func(v int64) error {
+							if v > 0 {
+								return nil
+							}
+							return fmt.Errorf("mtime not set")
+						}),
+					),
+				},
+			},
+			// Replacement test
+			{
+				Config: `
+					resource "denobridge_resource" "test_zod" {
+						path  = "./resource_zod_test.ts"
+						props = {
+							path = "./test_zod2.txt"
+							content = "Hello Again Zod"
+						}
+						permissions = {
+							all = true
+						}
+					}
+				`,
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("id"),
+						knownvalue.StringExact("./test_zod2.txt"),
+					),
+					statecheck.ExpectKnownValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("props").AtMapKey("path"),
+						knownvalue.StringExact("./test_zod2.txt"),
+					),
+					statecheck.ExpectKnownValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("props").AtMapKey("content"),
+						knownvalue.StringExact("Hello Again Zod"),
+					),
+					statecheck.ExpectKnownValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("state").AtMapKey("mtime"),
+						knownvalue.Int64Func(func(v int64) error {
+							if v > 0 {
+								return nil
+							}
+							return fmt.Errorf("mtime not set")
+						}),
+					),
+				},
+			},
+			// Import test
+			{
+				ResourceName: "denobridge_resource.test_zod",
+				ImportState:  true,
+				ImportStateId: `{
+					"id": "./test_zod2.txt",
+					"path": "./resource_zod_test.ts",
+					"permissions": {
+						"all": true
+					}
+				}`,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
