@@ -13,7 +13,7 @@ import (
 )
 
 // FromDynamic converts a Terraform Dynamic value to a native Go type.
-// It handles null values, primitives (string, bool, number), and complex types (list, map, object).
+// It handles null values, primitives (string, bool, number), and complex types (list, tuple, map, object).
 //
 // Parameters:
 //   - dynVal: The Terraform Dynamic value to convert
@@ -23,7 +23,7 @@ import (
 //   - string for String values
 //   - bool for Bool values
 //   - float64 for Number values
-//   - []any for List values
+//   - []any for List and Tuple values
 //   - map[string]any for Map and Object values
 //   - string representation for unknown types
 func FromDynamic(dynVal types.Dynamic) any {
@@ -66,6 +66,13 @@ func FromDynamic(dynVal types.Dynamic) any {
 			result[k] = FromValue(attr)
 		}
 		return result
+	case types.Tuple:
+		elements := v.Elements()
+		result := make([]any, len(elements))
+		for i, elem := range elements {
+			result[i] = FromValue(elem)
+		}
+		return result
 	default:
 		return fmt.Sprintf("%+v", v)
 	}
@@ -83,7 +90,7 @@ func FromDynamic(dynVal types.Dynamic) any {
 //   - string for String values
 //   - bool for Bool values
 //   - float64 for Number values
-//   - []any for List values (with recursive element conversion)
+//   - []any for List and Tuple values (with recursive element conversion)
 //   - map[string]any for Map and Object values (with recursive element conversion)
 //   - string representation for unknown types
 func FromValue(in attr.Value) any {
@@ -124,6 +131,13 @@ func FromValue(in attr.Value) any {
 		result := make(map[string]any)
 		for k, attr := range attrs {
 			result[k] = FromValue(attr)
+		}
+		return result
+	case types.Tuple:
+		elements := v.Elements()
+		result := make([]any, len(elements))
+		for i, elem := range elements {
+			result[i] = FromValue(elem)
 		}
 		return result
 	default:

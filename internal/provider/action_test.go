@@ -99,6 +99,7 @@ func TestActionWithZod(t *testing.T) {
 							props = {
 								path = "./action_zod_test.txt"
 								content = "hello from zod"
+								args = ["a", "b", "c"]
 							}
 							permissions = {
 								all = true
