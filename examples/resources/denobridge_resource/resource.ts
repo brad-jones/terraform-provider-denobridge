@@ -9,6 +9,10 @@ interface Props {
 
 interface State {
   mtime: number;
+
+  // Values nested under the "sensitive" key are automatically marked as sensitive
+  // in Terraform state, but they are still stored in state and passed to all methods,
+  // it just stops them from being displayed in CLI output.
   sensitive: {
     secret: string;
   };

@@ -6,6 +6,10 @@ interface Props {
 
 interface Result {
   uuid: string;
+
+  // Values nested under the "sensitive" key are automatically marked as sensitive
+  // in Terraform state, but they are still stored in state and passed to all methods,
+  // it just stops them from being displayed in CLI output.
   sensitive: {
     token: string;
   };
