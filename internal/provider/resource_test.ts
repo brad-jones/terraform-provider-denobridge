@@ -67,14 +67,14 @@ new ResourceProvider<Props, State>({
     await Deno.remove(id);
   },
   async modifyPlan(_id, planType, nextProps, currentProps, currentState) {
-    // If you decide you don't want to make any changes to the plan, just return a 204 No Content response.
+    // If you decide you don't want to make any changes to the plan
     if (planType !== "update") {
       return;
     }
 
     // The most common use case for this endpoint is to tell tf if the resource
     // requires replacement (ie: create then delete) instead of an inline update.
-    return { requiresReplacement: currentProps?.path !== nextProps.path };
+    return { requiresReplacement: currentProps?.path !== nextProps?.path };
 
     // Other use cases include returning a set of modifiedProps.
     // For example to provide default values for any unset props.
