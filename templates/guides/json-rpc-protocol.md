@@ -950,6 +950,9 @@ Reads data from an external source based on the provided configuration.
     "result": {
       "// Retrieved data": "..."
     },
+    "sensitiveResult": {
+      "// Sensitive retrieved data": "..."
+    },
     "diagnostics": [
       {
         "severity": "warning",
@@ -962,7 +965,11 @@ Reads data from an external source based on the provided configuration.
 }
 ```
 
-**Note**: The `diagnostics` field is optional and can be omitted if there are no warnings or errors to report.
+**Fields:**
+
+- `result` (required): The data retrieved from the external source
+- `sensitiveResult` (optional): Sensitive data (marked as sensitive in Terraform, not displayed in logs or plan output)
+- `diagnostics` (optional): Warnings or errors to display to the user
 
 #### OpenRPC Schema
 
@@ -994,6 +1001,10 @@ Reads data from an external source based on the provided configuration.
         "result": {
           "type": "object",
           "description": "Retrieved data from the external source"
+        },
+        "sensitiveResult": {
+          "type": "object",
+          "description": "Sensitive retrieved data from the external source (marked as sensitive in Terraform)"
         },
         "diagnostics": {
           "type": "array",

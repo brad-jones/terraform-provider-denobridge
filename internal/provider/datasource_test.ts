@@ -6,6 +6,9 @@ interface Props {
 
 interface Result {
   hashedValue: string;
+  sensitive: {
+    secret: string;
+  };
 }
 
 new DatasourceProvider<Props, Result>({
@@ -15,6 +18,11 @@ new DatasourceProvider<Props, Result>({
     const hashBuffer = await crypto.subtle.digest("SHA-256", data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const hashedValue = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-    return { hashedValue };
+    return {
+      hashedValue,
+      sensitive: {
+        secret: "datasource-secret",
+      },
+    };
   },
 });

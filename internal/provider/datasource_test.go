@@ -42,6 +42,15 @@ func TestDataSource(t *testing.T) {
 						tfjsonpath.New("result").AtMapKey("hashedValue"),
 						knownvalue.StringExact("a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e"),
 					),
+					statecheck.ExpectKnownValue(
+						"data.denobridge_datasource.test",
+						tfjsonpath.New("sensitive_result").AtMapKey("secret"),
+						knownvalue.StringExact("datasource-secret"),
+					),
+					statecheck.ExpectSensitiveValue(
+						"data.denobridge_datasource.test",
+						tfjsonpath.New("sensitive_result"),
+					),
 				},
 			},
 		},
@@ -80,6 +89,15 @@ func TestDatasourceWithZod(t *testing.T) {
 						"data.denobridge_datasource.test_zod",
 						tfjsonpath.New("result").AtMapKey("hashedValue"),
 						knownvalue.StringExact("a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e"),
+					),
+					statecheck.ExpectKnownValue(
+						"data.denobridge_datasource.test_zod",
+						tfjsonpath.New("sensitive_result").AtMapKey("secret"),
+						knownvalue.StringExact("datasource-secret"),
+					),
+					statecheck.ExpectSensitiveValue(
+						"data.denobridge_datasource.test_zod",
+						tfjsonpath.New("sensitive_result"),
 					),
 				},
 			},

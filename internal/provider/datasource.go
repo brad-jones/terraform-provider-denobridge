@@ -29,11 +29,12 @@ type denoBridgeDataSource struct {
 
 // denoBridgeDataSourceModel maps the data source schema data.
 type denoBridgeDataSourceModel struct {
-	Path        types.String        `tfsdk:"path"`
-	Props       types.Dynamic       `tfsdk:"props"`
-	Result      types.Dynamic       `tfsdk:"result"`
-	ConfigFile  types.String        `tfsdk:"config_file"`
-	Permissions *deno.PermissionsTF `tfsdk:"permissions"`
+	Path            types.String        `tfsdk:"path"`
+	Props           types.Dynamic       `tfsdk:"props"`
+	Result          types.Dynamic       `tfsdk:"result"`
+	SensitiveResult types.Dynamic       `tfsdk:"sensitive_result"`
+	ConfigFile      types.String        `tfsdk:"config_file"`
+	Permissions     *deno.PermissionsTF `tfsdk:"permissions"`
 }
 
 // Metadata returns the data source type name.
@@ -57,6 +58,11 @@ func (d *denoBridgeDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 			"result": schema.DynamicAttribute{
 				Description: "Output data returned from the Deno script.",
 				Computed:    true,
+			},
+			"sensitive_result": schema.DynamicAttribute{
+				Description: "Sensitive output data returned from the Deno script.",
+				Computed:    true,
+				Sensitive:   true,
 			},
 			"config_file": schema.StringAttribute{
 				Description: "File path to a deno config file to use with the deno script. Useful for import maps, etc...",
@@ -168,5 +174,6 @@ func (d *denoBridgeDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	// Set state
 	state.Result = dynamic.ToDynamic(response.Result)
+	state.SensitiveResult = dynamic.ToDynamic(response.SensitiveResult)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

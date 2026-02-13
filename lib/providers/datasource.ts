@@ -36,7 +36,17 @@ export class DatasourceProvider<TProps, TResult> extends BaseJsonRpcProvider {
       async read(params: { props: unknown }) {
         const result = await providerMethods.read(params.props as TProps);
         if (isDiagnostics(result)) return result;
-        return { result };
+
+        // deno-lint-ignore no-explicit-any
+        const sensitiveResult = (result as any)?.sensitive;
+
+        // deno-lint-ignore no-explicit-any
+        const resultData = result as any;
+        if (resultData && "sensitive" in resultData) {
+          delete resultData["sensitive"];
+        }
+
+        return { result: resultData, sensitiveResult };
       },
     }));
   }

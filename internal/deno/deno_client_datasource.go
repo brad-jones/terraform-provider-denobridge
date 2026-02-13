@@ -47,6 +47,8 @@ type ReadRequest struct {
 type ReadResponse struct {
 	// Result contains the data returned by the data source, which will be stored in Terraform state
 	Result any `json:"result"`
+	// SensitiveResult contains the data source sensitive data (marked as sensitive in Terraform)
+	SensitiveResult any `json:"sensitiveResult"`
 	// Diagnostics contains any warnings or errors to display to the user
 	Diagnostics *[]struct {
 		// Severity indicates the diagnostic level ("error" or "warning")
