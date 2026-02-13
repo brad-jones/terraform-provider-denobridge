@@ -18,6 +18,7 @@ export type ResourceProviderMethods<TProps, TState, TID = string> = {
    * @returns A promise that resolves to an object containing the resource ID and initial state.
    */
   create(props: TProps): Promise<Diagnostics | { id: TID; state: TState }>;
+
   /**
    * Reads an existing resource by its ID and validates it against the expected properties.
    * @param id - The identifier of the resource to read.
@@ -28,6 +29,7 @@ export type ResourceProviderMethods<TProps, TState, TID = string> = {
    *          or an object with exists: false if the resource no longer exists.
    */
   read(id: TID, props: TProps | null): Promise<Diagnostics | { props: TProps; state: TState } | { exists: false }>;
+
   /**
    * Updates an existing resource with new properties.
    * @param id - The identifier of the resource to update.
@@ -42,6 +44,7 @@ export type ResourceProviderMethods<TProps, TState, TID = string> = {
     currentProps: TProps,
     currentState: TState,
   ): Promise<Diagnostics | TState>;
+
   /**
    * Deletes an existing resource.
    * @param id - The identifier of the resource to delete.
@@ -50,6 +53,7 @@ export type ResourceProviderMethods<TProps, TState, TID = string> = {
    * @returns A promise that resolves when the resource is deleted.
    */
   delete(id: TID, props: TProps, state: TState): Promise<Diagnostics | void>;
+
   /**
    * Modifies a Terraform plan before execution. This method is optional and allows customizing
    * the planned changes, adding diagnostics, or indicating that a resource replacement is required.
