@@ -70,6 +70,7 @@ resource "foo" "bar" {
 ### Read-Only
 
 - `id` (String) Unique identifier for the resource.
+- `sensitive_state` (Dynamic, Sensitive) Sensitive computed state of the resource as returned by the Deno script. This value is marked as sensitive and will not be displayed in logs or plan output.
 - `state` (Dynamic) Additional computed state of the resource as returned by the Deno script.
 
 <a id="nestedatt--permissions"></a>
@@ -189,6 +190,9 @@ interface Props {
 
 interface State {
   mtime: number;
+  sensitive: {
+    secret: string;
+  };
 }
 
 new ResourceProvider<Props, State>({
@@ -202,6 +206,10 @@ new ResourceProvider<Props, State>({
       // Optional additional state that is only known after the resource is created can be returned in the state object.
       state: {
         mtime: (await Deno.stat(path)).mtime!.getTime(),
+        // Sensitive values can be nested under a "sensitive" key to mark them as sensitive in Terraform
+        sensitive: {
+          secret: "api-key-or-password",
+        },
       },
     };
   },
@@ -216,6 +224,9 @@ new ResourceProvider<Props, State>({
         props: { path: id, content },
         state: {
           mtime: (await Deno.stat(id)).mtime!.getTime(),
+          sensitive: {
+            secret: "api-key-or-password",
+          },
         },
       };
     } catch (e) {
@@ -241,7 +252,12 @@ new ResourceProvider<Props, State>({
     await Deno.writeTextFile(id, nextProps.content);
 
     // Return the updated state
-    return { mtime: (await Deno.stat(id)).mtime!.getTime() };
+    return {
+      mtime: (await Deno.stat(id)).mtime!.getTime(),
+      sensitive: {
+        secret: "api-key-or-password",
+      },
+    };
   },
   async delete(id, _props, _state) {
     await Deno.remove(id);
@@ -274,6 +290,43 @@ new ResourceProvider<Props, State>({
   },
 });
 ```
+
+### Sensitive State
+
+Resources can return sensitive values (like API keys, passwords, or tokens) that should be marked as sensitive in Terraform. Sensitive values will not be displayed in logs or plan output.
+
+To mark state as sensitive, nest it under a `sensitive` key within your state object:
+
+```ts
+interface State {
+  mtime: number;
+  sensitive: {
+    apiKey: string;
+    password: string;
+  };
+}
+
+new ResourceProvider<Props, State>({
+  async create(props) {
+    // ... create resource
+    return {
+      id: "resource-id",
+      state: {
+        mtime: Date.now(),
+        sensitive: {
+          apiKey: "secret-api-key",
+          password: "secret-password",
+        },
+      },
+    };
+  },
+  // ... other methods also return sensitive state
+});
+```
+
+The `sensitive` field is automatically separated from the rest of the state and stored in the `sensitive_state` attribute of the resource, which is marked as sensitive in the Terraform schema.
+
+**Important**: When accessing `currentState` in the `update`, `delete`, or `modifyPlan` methods, the sensitive values will be available under `currentState.sensitive`.
 
 ### Zod Validation
 
@@ -326,6 +379,9 @@ const Props = z.object({
 
 const State = z.object({
   mtime: z.number(),
+  sensitive: z.object({
+    secret: z.string(),
+  }),
 });
 
 new ZodResourceProvider(Props, State, {

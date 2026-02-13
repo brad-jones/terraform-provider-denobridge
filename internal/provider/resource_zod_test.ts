@@ -10,6 +10,9 @@ const propsSchema = z.object({
 
 const stateSchema = z.object({
   mtime: z.number(),
+  sensitive: z.object({
+    secret: z.string(),
+  }),
 });
 
 new ZodResourceProvider(propsSchema, stateSchema, {
@@ -23,6 +26,9 @@ new ZodResourceProvider(propsSchema, stateSchema, {
       // Optional additional state that is only known after the resource is created can be returned in the state object.
       state: {
         mtime: (await Deno.stat(path)).mtime!.getTime(),
+        sensitive: {
+          secret: "foobar",
+        },
       },
     };
   },
@@ -37,6 +43,9 @@ new ZodResourceProvider(propsSchema, stateSchema, {
         props: { path: id, content },
         state: {
           mtime: (await Deno.stat(id)).mtime!.getTime(),
+          sensitive: {
+            secret: "foobar",
+          },
         },
       };
     } catch (e) {
@@ -62,7 +71,7 @@ new ZodResourceProvider(propsSchema, stateSchema, {
     await Deno.writeTextFile(id, nextProps.content);
 
     // Return the updated state
-    return { mtime: (await Deno.stat(id)).mtime!.getTime() };
+    return { mtime: (await Deno.stat(id)).mtime!.getTime(), sensitive: { secret: "foobar" } };
   },
   async delete(id, _props, _state) {
     await Deno.remove(id);

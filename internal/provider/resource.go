@@ -35,12 +35,13 @@ type denoBridgeResource struct {
 
 // denoBridgeResourceModel maps the resource schema data.
 type denoBridgeResourceModel struct {
-	ID          types.String        `tfsdk:"id"`
-	Path        types.String        `tfsdk:"path"`
-	Props       types.Dynamic       `tfsdk:"props"`
-	State       types.Dynamic       `tfsdk:"state"`
-	ConfigFile  types.String        `tfsdk:"config_file"`
-	Permissions *deno.PermissionsTF `tfsdk:"permissions"`
+	ID             types.String        `tfsdk:"id"`
+	Path           types.String        `tfsdk:"path"`
+	Props          types.Dynamic       `tfsdk:"props"`
+	State          types.Dynamic       `tfsdk:"state"`
+	SensitiveState types.Dynamic       `tfsdk:"sensitive_state"`
+	ConfigFile     types.String        `tfsdk:"config_file"`
+	Permissions    *deno.PermissionsTF `tfsdk:"permissions"`
 }
 
 // Metadata returns the resource type name.
@@ -71,6 +72,11 @@ func (r *denoBridgeResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"state": schema.DynamicAttribute{
 				Description: "Additional computed state of the resource as returned by the Deno script.",
 				Computed:    true,
+			},
+			"sensitive_state": schema.DynamicAttribute{
+				Description: "Sensitive computed state of the resource as returned by the Deno script. This value is marked as sensitive and will not be displayed in logs or plan output.",
+				Computed:    true,
+				Sensitive:   true,
 			},
 			"config_file": schema.StringAttribute{
 				Description: "File path to a deno config file to use with the deno script. Useful for import maps, etc...",
@@ -184,6 +190,7 @@ func (r *denoBridgeResource) Create(ctx context.Context, req resource.CreateRequ
 	// Set state
 	plan.ID = types.StringValue(response.ID)
 	plan.State = dynamic.ToDynamic(response.State)
+	plan.SensitiveState = dynamic.ToDynamic(response.SensitiveState)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -257,6 +264,7 @@ func (r *denoBridgeResource) Read(ctx context.Context, req resource.ReadRequest,
 	// Set refreshed state
 	state.Props = dynamic.ToDynamic(response.Props)
 	state.State = dynamic.ToDynamic(response.State)
+	state.SensitiveState = dynamic.ToDynamic(response.SensitiveState)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -297,10 +305,11 @@ func (r *denoBridgeResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	// Call the update endpoint
 	response, err := c.Update(ctx, &deno.UpdateRequest{
-		ID:           state.ID.ValueString(),
-		NextProps:    dynamic.FromDynamic(plan.Props),
-		CurrentProps: dynamic.FromDynamic(state.Props),
-		CurrentState: dynamic.FromDynamic(state.State),
+		ID:                    state.ID.ValueString(),
+		NextProps:             dynamic.FromDynamic(plan.Props),
+		CurrentProps:          dynamic.FromDynamic(state.Props),
+		CurrentState:          dynamic.FromDynamic(state.State),
+		CurrentSensitiveState: dynamic.FromDynamic(state.SensitiveState),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -340,6 +349,7 @@ func (r *denoBridgeResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	// Set updated state
 	plan.State = dynamic.ToDynamic(response.State)
+	plan.SensitiveState = dynamic.ToDynamic(response.SensitiveState)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -372,9 +382,10 @@ func (r *denoBridgeResource) Delete(ctx context.Context, req resource.DeleteRequ
 
 	// Call the delete endpoint
 	response, err := c.Delete(ctx, &deno.DeleteRequest{
-		ID:    state.ID.ValueString(),
-		Props: dynamic.FromDynamic(state.Props),
-		State: dynamic.FromDynamic(state.State),
+		ID:             state.ID.ValueString(),
+		Props:          dynamic.FromDynamic(state.Props),
+		State:          dynamic.FromDynamic(state.State),
+		SensitiveState: dynamic.FromDynamic(state.SensitiveState),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -500,24 +511,28 @@ func (r *denoBridgeResource) ModifyPlan(ctx context.Context, req resource.Modify
 		planType = "create"
 		nextProps = dynamic.FromDynamic(plan.Props)
 	}
+	var currentSensitiveState any
 	if plan != nil && state != nil {
 		planType = "update"
 		nextProps = dynamic.FromDynamic(plan.Props)
 		currentProps = dynamic.FromDynamic(state.Props)
 		currentState = dynamic.FromDynamic(state.State)
+		currentSensitiveState = dynamic.FromDynamic(state.SensitiveState)
 	}
 	if plan == nil && state != nil {
 		planType = "delete"
 		currentProps = dynamic.FromDynamic(state.Props)
 		currentState = dynamic.FromDynamic(state.State)
+		currentSensitiveState = dynamic.FromDynamic(state.SensitiveState)
 	}
 
 	response, err := c.ModifyPlan(ctx, &deno.ModifyPlanRequest{
-		ID:           id,
-		PlanType:     planType,
-		NextProps:    nextProps,
-		CurrentProps: currentProps,
-		CurrentState: currentState,
+		ID:                    id,
+		PlanType:              planType,
+		NextProps:             nextProps,
+		CurrentProps:          currentProps,
+		CurrentState:          currentState,
+		CurrentSensitiveState: currentSensitiveState,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to modify the plan", err.Error())

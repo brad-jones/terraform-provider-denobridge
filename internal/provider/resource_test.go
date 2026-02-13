@@ -58,6 +58,10 @@ func TestResource(t *testing.T) {
 							return fmt.Errorf("mtime not set")
 						}),
 					),
+					statecheck.ExpectSensitiveValue(
+						"denobridge_resource.test",
+						tfjsonpath.New("sensitive_state"),
+					),
 				},
 			},
 			// Update in place test
@@ -100,6 +104,10 @@ func TestResource(t *testing.T) {
 							return fmt.Errorf("mtime not set")
 						}),
 					),
+					statecheck.ExpectSensitiveValue(
+						"denobridge_resource.test",
+						tfjsonpath.New("sensitive_state"),
+					),
 				},
 			},
 			// Replacement test
@@ -141,6 +149,10 @@ func TestResource(t *testing.T) {
 							}
 							return fmt.Errorf("mtime not set")
 						}),
+					),
+					statecheck.ExpectSensitiveValue(
+						"denobridge_resource.test",
+						tfjsonpath.New("sensitive_state"),
 					),
 				},
 			},
@@ -209,6 +221,10 @@ func TestResourceWithZod(t *testing.T) {
 							return fmt.Errorf("mtime not set")
 						}),
 					),
+					statecheck.ExpectSensitiveValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("sensitive_state"),
+					),
 				},
 			},
 			// Update in place test
@@ -251,6 +267,10 @@ func TestResourceWithZod(t *testing.T) {
 							return fmt.Errorf("mtime not set")
 						}),
 					),
+					statecheck.ExpectSensitiveValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("sensitive_state"),
+					),
 				},
 			},
 			// Replacement test
@@ -292,6 +312,10 @@ func TestResourceWithZod(t *testing.T) {
 							}
 							return fmt.Errorf("mtime not set")
 						}),
+					),
+					statecheck.ExpectSensitiveValue(
+						"denobridge_resource.test_zod",
+						tfjsonpath.New("sensitive_state"),
 					),
 				},
 			},

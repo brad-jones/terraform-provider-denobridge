@@ -52,6 +52,8 @@ type CreateResponse struct {
 	ID string `json:"id"`
 	// State contains the resource's state data to be stored in Terraform state
 	State any `json:"state"`
+	// SensitiveState contains the resource's sensitive state data to be stored in Terraform state (marked as sensitive)
+	SensitiveState any `json:"sensitiveState"`
 	// Diagnostics contains any warnings or errors to display to the user
 	Diagnostics *[]struct {
 		// Severity indicates the diagnostic level ("error" or "warning")
@@ -97,6 +99,8 @@ type CreateReadResponse struct {
 	Props *any `json:"props"`
 	// State contains the updated resource state data
 	State *any `json:"state"`
+	// SensitiveState contains the updated resource sensitive state data
+	SensitiveState *any `json:"sensitiveState"`
 	// Exists indicates whether the resource still exists in the external system
 	Exists *bool `json:"exists"`
 	// Diagnostics contains any warnings or errors to display to the user
@@ -139,6 +143,8 @@ type UpdateRequest struct {
 	CurrentProps any `json:"currentProps"`
 	// CurrentState contains the current resource state data
 	CurrentState any `json:"currentState"`
+	// CurrentSensitiveState contains the current resource sensitive state data
+	CurrentSensitiveState any `json:"currentSensitiveState"`
 }
 
 // UpdateResponse represents the response from updating a Terraform resource.
@@ -146,6 +152,8 @@ type UpdateRequest struct {
 type UpdateResponse struct {
 	// State contains the updated resource state data after the update operation
 	State *any `json:"state"`
+	// SensitiveState contains the updated resource sensitive state data after the update operation
+	SensitiveState *any `json:"sensitiveState"`
 	// Diagnostics contains any warnings or errors to display to the user
 	Diagnostics *[]struct {
 		// Severity indicates the diagnostic level ("error" or "warning")
@@ -184,6 +192,8 @@ type DeleteRequest struct {
 	Props any `json:"props"`
 	// State contains the resource state data
 	State any `json:"state"`
+	// SensitiveState contains the resource sensitive state data
+	SensitiveState any `json:"sensitiveState"`
 	// Diagnostics contains any warnings or errors to display to the user
 	Diagnostics *[]struct {
 		// Severity indicates the diagnostic level ("error" or "warning")
@@ -244,6 +254,8 @@ type ModifyPlanRequest struct {
 	CurrentProps any `json:"currentProps,omitempty"`
 	// CurrentState contains the current resource state data (not present during create)
 	CurrentState any `json:"currentState,omitempty"`
+	// CurrentSensitiveState contains the current resource sensitive state data (not present during create)
+	CurrentSensitiveState any `json:"currentSensitiveState,omitempty"`
 }
 
 // ModifyPlanResponse represents the response from modifying a Terraform plan.

@@ -9,6 +9,9 @@ interface Props {
 
 interface State {
   mtime: number;
+  sensitive: {
+    secret: string;
+  };
 }
 
 new ResourceProvider<Props, State>({
@@ -22,6 +25,9 @@ new ResourceProvider<Props, State>({
       // Optional additional state that is only known after the resource is created can be returned in the state object.
       state: {
         mtime: (await Deno.stat(path)).mtime!.getTime(),
+        sensitive: {
+          secret: "foobar",
+        },
       },
     };
   },
@@ -36,6 +42,9 @@ new ResourceProvider<Props, State>({
         props: { path: id, content },
         state: {
           mtime: (await Deno.stat(id)).mtime!.getTime(),
+          sensitive: {
+            secret: "foobar",
+          },
         },
       };
     } catch (e) {
@@ -61,7 +70,7 @@ new ResourceProvider<Props, State>({
     await Deno.writeTextFile(id, nextProps.content);
 
     // Return the updated state
-    return { mtime: (await Deno.stat(id)).mtime!.getTime() };
+    return { mtime: (await Deno.stat(id)).mtime!.getTime(), sensitive: { secret: "foobar" } };
   },
   async delete(id, _props, _state) {
     await Deno.remove(id);

@@ -195,6 +195,9 @@ Creates a new resource instance.
     "state": {
       "// Computed state values": "..."
     },
+    "sensitiveState": {
+      "// Sensitive computed state values": "..."
+    },
     "diagnostics": [
       {
         "severity": "warning",
@@ -244,6 +247,10 @@ Creates a new resource instance.
         "state": {
           "type": "object",
           "description": "Computed state values for the resource"
+        },
+        "sensitiveState": {
+          "type": "object",
+          "description": "Sensitive computed state values for the resource (marked as sensitive in Terraform)"
         },
         "diagnostics": {
           "type": "array",
@@ -316,6 +323,9 @@ Reads the current state of a resource instance. Can indicate resource no longer 
     "state": {
       "// Refreshed computed state": "..."
     },
+    "sensitiveState": {
+      "// Refreshed sensitive computed state": "..."
+    },
     "diagnostics": [
       {
         "severity": "warning",
@@ -383,6 +393,10 @@ Reads the current state of a resource instance. Can indicate resource no longer 
             "state": {
               "type": "object",
               "description": "Refreshed computed state"
+            },
+            "sensitiveState": {
+              "type": "object",
+              "description": "Refreshed sensitive computed state"
             },
             "diagnostics": {
               "type": "array",
@@ -456,6 +470,9 @@ Updates an existing resource instance with new configuration.
     },
     "currentState": {
       "// Current computed state": "..."
+    },
+    "currentSensitiveState": {
+      "// Current sensitive computed state": "..."
     }
   },
   "id": 5
@@ -470,6 +487,9 @@ Updates an existing resource instance with new configuration.
   "result": {
     "state": {
       "// Updated computed state": "..."
+    },
+    "sensitiveState": {
+      "// Updated sensitive computed state": "..."
     },
     "diagnostics": [
       {
@@ -513,6 +533,10 @@ Updates an existing resource instance with new configuration.
           "currentState": {
             "type": "object",
             "description": "Current computed state before the update"
+          },
+          "currentSensitiveState": {
+            "type": "object",
+            "description": "Current sensitive computed state before the update"
           }
         },
         "required": ["id", "nextProps", "currentProps", "currentState"]
@@ -527,6 +551,10 @@ Updates an existing resource instance with new configuration.
         "state": {
           "type": "object",
           "description": "Updated computed state after the update"
+        },
+        "sensitiveState": {
+          "type": "object",
+          "description": "Updated sensitive computed state after the update"
         },
         "diagnostics": {
           "type": "array",
@@ -584,6 +612,9 @@ Deletes a resource instance.
     },
     "state": {
       "// Current computed state": "..."
+    },
+    "sensitiveState": {
+      "// Current sensitive computed state": "..."
     }
   },
   "id": 6
@@ -635,6 +666,10 @@ Deletes a resource instance.
           "state": {
             "type": "object",
             "description": "Current computed state"
+          },
+          "sensitiveState": {
+            "type": "object",
+            "description": "Current sensitive computed state"
           }
         },
         "required": ["id", "props", "state"]
@@ -710,6 +745,9 @@ Allows the resource to modify planned values before apply or indicate that a res
     },
     "currentState": {
       "// Current computed state": "..."
+    },
+    "currentSensitiveState": {
+      "// Current sensitive computed state": "..."
     }
   },
   "id": 7
@@ -797,6 +835,10 @@ Allows the resource to modify planned values before apply or indicate that a res
           "currentState": {
             "type": ["object", "null"],
             "description": "Current computed state (null for create)"
+          },
+          "currentSensitiveState": {
+            "type": ["object", "null"],
+            "description": "Current sensitive computed state (null for create)"
           }
         },
         "required": ["planType", "nextProps"]

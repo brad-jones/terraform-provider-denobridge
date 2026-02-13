@@ -201,10 +201,34 @@ export class ResourceProvider<TProps, TState = void, TID = string> extends BaseJ
   constructor(providerMethods: ResourceProviderMethods<TProps, TState, TID>) {
     super(() => ({
       async create(params: { props: Record<string, unknown> }) {
-        return await providerMethods.create(params.props as TProps);
+        const result = await providerMethods.create(params.props as TProps);
+
+        if (isDiagnostics(result)) return result;
+
+        const sensitiveState = (result as any).state?.sensitive;
+
+        const state = (result as any).state;
+        if (state && "sensitive" in state) {
+          delete state["sensitive"];
+        }
+
+        return { id: result.id, state, sensitiveState };
       },
       async read(params: { id: TID; props: Record<string, unknown> | null }) {
-        return await providerMethods.read(params.id, params.props as TProps | null);
+        const result = await providerMethods.read(params.id, params.props as TProps | null);
+
+        if ("exists" in result) return result;
+
+        if (isDiagnostics(result)) return result;
+
+        const sensitiveState = (result as any).state?.sensitive;
+
+        const state = (result as any).state;
+        if (state && "sensitive" in state) {
+          delete state["sensitive"];
+        }
+
+        return { props: result.props, state, sensitiveState };
       },
       async update(
         params: {
@@ -212,19 +236,40 @@ export class ResourceProvider<TProps, TState = void, TID = string> extends BaseJ
           nextProps: Record<string, unknown>;
           currentProps: Record<string, unknown>;
           currentState: Record<string, unknown>;
+          currentSensitiveState?: Record<string, unknown>;
         },
       ) {
         const result = await providerMethods.update(
           params.id,
           params.nextProps as TProps,
           params.currentProps as TProps,
-          params.currentState as TState,
+          { ...params.currentState, sensitive: params.currentSensitiveState } as TState,
         );
+
         if (isDiagnostics(result)) return result;
-        return { state: result };
+
+        const sensitiveState = (result as any)?.sensitive;
+
+        const state = result as any;
+        if (state && "sensitive" in state) {
+          delete state["sensitive"];
+        }
+
+        return { state: result, sensitiveState };
       },
-      async delete(params: { id: TID; props: Record<string, unknown>; state: Record<string, unknown> }) {
-        const result = await providerMethods.delete(params.id, params.props as TProps, params.state as TState);
+      async delete(
+        params: {
+          id: TID;
+          props: Record<string, unknown>;
+          state: Record<string, unknown>;
+          sensitiveState?: Record<string, unknown>;
+        },
+      ) {
+        const result = await providerMethods.delete(
+          params.id,
+          params.props as TProps,
+          { ...params.state, sensitive: params.sensitiveState } as TState,
+        );
         if (isDiagnostics(result)) return result;
         return { done: true };
       },
@@ -235,6 +280,7 @@ export class ResourceProvider<TProps, TState = void, TID = string> extends BaseJ
           nextProps?: Record<string, unknown>;
           currentProps?: Record<string, unknown>;
           currentState?: Record<string, unknown>;
+          currentSensitiveState?: Record<string, unknown>;
         },
       ) {
         if (!providerMethods.modifyPlan) throw new JSONRPCMethodNotFoundError();
@@ -244,7 +290,9 @@ export class ResourceProvider<TProps, TState = void, TID = string> extends BaseJ
           params.planType,
           params.nextProps as TProps ?? null,
           params.currentProps as TProps ?? null,
-          params.currentState as TState ?? null,
+          params.currentState || params.currentSensitiveState
+            ? { ...params.currentState, sensitive: params.currentSensitiveState } as TState
+            : null,
         );
 
         if (result) {

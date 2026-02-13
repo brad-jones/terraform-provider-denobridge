@@ -9,6 +9,9 @@ interface Props {
 
 interface State {
   mtime: number;
+  sensitive: {
+    secret: string;
+  };
 }
 
 new ResourceProvider<Props, State>({
@@ -22,6 +25,10 @@ new ResourceProvider<Props, State>({
       // Optional additional state that is only known after the resource is created can be returned in the state object.
       state: {
         mtime: (await Deno.stat(path)).mtime!.getTime(),
+        // Sensitive values can be nested under a "sensitive" key to mark them as sensitive in Terraform
+        sensitive: {
+          secret: "api-key-or-password",
+        },
       },
     };
   },
@@ -36,6 +43,9 @@ new ResourceProvider<Props, State>({
         props: { path: id, content },
         state: {
           mtime: (await Deno.stat(id)).mtime!.getTime(),
+          sensitive: {
+            secret: "api-key-or-password",
+          },
         },
       };
     } catch (e) {
@@ -61,7 +71,12 @@ new ResourceProvider<Props, State>({
     await Deno.writeTextFile(id, nextProps.content);
 
     // Return the updated state
-    return { mtime: (await Deno.stat(id)).mtime!.getTime() };
+    return {
+      mtime: (await Deno.stat(id)).mtime!.getTime(),
+      sensitive: {
+        secret: "api-key-or-password",
+      },
+    };
   },
   async delete(id, _props, _state) {
     await Deno.remove(id);
