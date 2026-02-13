@@ -5,12 +5,14 @@ import { type Diagnostics, isDiagnostics } from "./diagnostics.ts";
 /**
  * Defines the methods that must be implemented by a datasource provider.
  * Datasources are read-only resources that fetch data from external sources.
+ *
  * @template TProps - The type of the properties/configuration for the datasource.
  * @template TResult - The type of the data returned by the datasource.
  */
 export interface DatasourceProviderMethods<TProps, TResult> {
   /**
    * Reads data from the datasource based on the provided properties.
+   *
    * @param props - The properties/configuration for the datasource read operation.
    * @returns A promise that resolves to the data fetched from the datasource.
    */
@@ -20,6 +22,7 @@ export interface DatasourceProviderMethods<TProps, TResult> {
 /**
  * Base class for implementing Terraform datasource providers with JSON-RPC communication.
  * Datasources are read-only and used to fetch data from external sources during Terraform operations.
+ *
  * @template TProps - The type of the properties/configuration for the datasource.
  * @template TResult - The type of the data returned by the datasource.
  */
@@ -42,6 +45,7 @@ export class DatasourceProvider<TProps, TResult> extends BaseJsonRpcProvider {
 /**
  * Datasource provider with built-in Zod schema validation for both properties and results.
  * Automatically validates incoming properties and outgoing results against the provided Zod schemas.
+ *
  * @template TProps - A Zod schema type that defines the shape of the datasource properties.
  * @template TResult - A Zod schema type that defines the shape of the datasource result.
  */
@@ -49,6 +53,7 @@ export class ZodDatasourceProvider<TProps extends z.ZodType, TResult extends z.Z
   extends DatasourceProvider<z.infer<TProps>, z.infer<TResult>> {
   /**
    * Creates a new ZodDatasourceProvider instance with schema validation.
+   *
    * @param propsSchema - The Zod schema used to validate datasource properties.
    * @param resultSchema - The Zod schema used to validate datasource results.
    * @param providerMethods - The implementation of the datasource provider methods.

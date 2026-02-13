@@ -7,6 +7,7 @@ import { type Diagnostics, isDiagnostics } from "./diagnostics.ts";
  * Defines the methods that must be implemented by a resource provider.
  * Resources are stateful objects that can be created, read, updated, and deleted (CRUD operations).
  * They maintain both configuration properties and runtime state.
+ *
  * @template TProps - The type of the properties/configuration for the resource.
  * @template TState - The type of the runtime state maintained by the resource.
  * @template TID - The type of the resource identifier (defaults to string).
@@ -14,6 +15,7 @@ import { type Diagnostics, isDiagnostics } from "./diagnostics.ts";
 export type ResourceProviderMethods<TProps, TState, TID = string> = {
   /**
    * Creates a new resource with the provided properties.
+   *
    * @param props - The properties/configuration for the new resource.
    * @returns A promise that resolves to an object containing the resource ID and initial state.
    */
@@ -21,6 +23,7 @@ export type ResourceProviderMethods<TProps, TState, TID = string> = {
 
   /**
    * Reads an existing resource by its ID and validates it against the expected properties.
+   *
    * @param id - The identifier of the resource to read.
    * @param props - The expected properties/configuration of the resource.
    *                Props may not always exist, for example when importing resource,
@@ -32,6 +35,7 @@ export type ResourceProviderMethods<TProps, TState, TID = string> = {
 
   /**
    * Updates an existing resource with new properties.
+   *
    * @param id - The identifier of the resource to update.
    * @param nextProps - The new properties/configuration to apply.
    * @param currentProps - The current properties/configuration before the update.
@@ -47,6 +51,7 @@ export type ResourceProviderMethods<TProps, TState, TID = string> = {
 
   /**
    * Deletes an existing resource.
+   *
    * @param id - The identifier of the resource to delete.
    * @param props - The current properties/configuration of the resource.
    * @param state - The current state of the resource.
@@ -57,6 +62,7 @@ export type ResourceProviderMethods<TProps, TState, TID = string> = {
   /**
    * Modifies a Terraform plan before execution. This method is optional and allows customizing
    * the planned changes, adding diagnostics, or indicating that a resource replacement is required.
+   *
    * @param id - The identifier of the resource (null for create operations).
    * @param planType - The type of operation being planned: "create", "update", or "delete".
    * @param nextProps - The new properties/configuration after the planned change (null for delete operations).
@@ -89,6 +95,7 @@ export type ResourceProviderMethods<TProps, TState, TID = string> = {
  * Base class for implementing Terraform resource providers with JSON-RPC communication.
  * Resources are stateful objects that support full CRUD operations (create, read, update, delete)
  * and maintain both configuration properties and runtime state throughout their lifecycle.
+ *
  * @template TProps - The type of the properties/configuration for the resource.
  * @template TState - The type of the runtime state maintained by the resource.
  * @template TID - The type of the resource identifier (defaults to string).

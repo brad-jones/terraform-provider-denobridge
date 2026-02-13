@@ -4,11 +4,13 @@ import { type Diagnostics, isDiagnostics } from "./diagnostics.ts";
 
 /**
  * Defines the methods that must be implemented by an action provider.
+ *
  * @template TProps - The type of the properties that will be passed to the action.
  */
 export type ActionProviderMethods<TProps> = {
   /**
    * Invokes the action with the provided properties.
+   *
    * @param props - The properties for the action invocation.
    * @param progressCallback - A callback function to report progress messages during action execution.
    * @returns A promise that resolves when the action completes.
@@ -22,6 +24,7 @@ export type ActionProviderMethods<TProps> = {
 type RemoteMethods = {
   /**
    * Notifies the remote client of progress during action invocation.
+   *
    * @param params - Object containing the progress message.
    */
   invokeProgress(params: { message: string }): void;
@@ -30,6 +33,7 @@ type RemoteMethods = {
 /**
  * Base class for implementing Terraform action providers with JSON-RPC communication.
  * Actions are operations that can be invoked with properties and report progress during execution.
+ *
  * @template TProps - The type of the properties that will be passed to the action.
  */
 export class ActionProvider<TProps> extends BaseJsonRpcProvider<RemoteMethods> {
@@ -54,6 +58,7 @@ export class ActionProvider<TProps> extends BaseJsonRpcProvider<RemoteMethods> {
 /**
  * Action provider with built-in Zod schema validation for properties.
  * Automatically validates incoming properties against the provided Zod schema before invoking the action.
+ *
  * @template TProps - A Zod schema type that defines the shape of the action properties.
  */
 export class ZodActionProvider<
@@ -61,6 +66,7 @@ export class ZodActionProvider<
 > extends ActionProvider<z.infer<TProps>> {
   /**
    * Creates a new ZodActionProvider instance with schema validation.
+   *
    * @param propsSchema - The Zod schema used to validate action properties.
    * @param providerMethods - The implementation of the action provider methods.
    */
