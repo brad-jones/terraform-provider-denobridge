@@ -8,6 +8,7 @@ shopt: [globstar]
 
 env:
   CGO_ENABLED: 0
+  GOBIN: "{{.ROOT_DIR}}/.pixi/envs/default/bin"
 
 tasks:
   init:
@@ -23,8 +24,6 @@ tasks:
 
   install-go-tools:
     desc: Installs all the golang dev tooling that vscode needs (for some reason the auto install that VsCode tries to run fails)
-    env:
-      GOBIN: "{{.ROOT_DIR}}/.pixi/envs/default/bin"
     cmds:
       - if: "! which gotests"
         cmd: go install -v github.com/cweill/gotests/gotests@v1.6.0
