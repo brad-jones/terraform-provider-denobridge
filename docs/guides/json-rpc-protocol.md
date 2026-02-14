@@ -179,11 +179,19 @@ Creates a new resource instance.
   "params": {
     "props": {
       "// User-defined configuration properties": "..."
+    },
+    "writeOnlyProps": {
+      "// Write-only properties (optional, not stored in state)": "..."
     }
   },
   "id": 3
 }
 ```
+
+**Fields:**
+
+- `props` (required): User-defined configuration properties for the resource
+- `writeOnlyProps` (optional): Write-only properties that are passed to the script but never stored in Terraform state. Typically used for ephemeral data like temporary credentials or tokens.
 
 #### Response
 
@@ -229,6 +237,10 @@ Creates a new resource instance.
           "props": {
             "type": "object",
             "description": "User-defined configuration properties for the resource"
+          },
+          "writeOnlyProps": {
+            "type": "object",
+            "description": "Write-only properties passed to the script but not stored in state"
           }
         },
         "required": ["props"]
@@ -465,6 +477,9 @@ Updates an existing resource instance with new configuration.
     "nextProps": {
       "// New desired configuration": "..."
     },
+    "nextWriteOnlyProps": {
+      "// New write-only properties (optional, not stored in state)": "..."
+    },
     "currentProps": {
       "// Current configuration": "..."
     },
@@ -478,6 +493,15 @@ Updates an existing resource instance with new configuration.
   "id": 5
 }
 ```
+
+**Fields:**
+
+- `id` (required): Unique identifier of the resource to update
+- `nextProps` (required): New desired configuration properties
+- `nextWriteOnlyProps` (optional): New write-only properties that are passed to the script but never stored in state
+- `currentProps` (required): Current configuration before the update
+- `currentState` (required): Current computed state before the update
+- `currentSensitiveState` (optional): Current sensitive computed state before the update
 
 #### Response
 
@@ -525,6 +549,10 @@ Updates an existing resource instance with new configuration.
           "nextProps": {
             "type": "object",
             "description": "New desired configuration properties"
+          },
+          "nextWriteOnlyProps": {
+            "type": "object",
+            "description": "New write-only properties passed to the script but not stored in state"
           },
           "currentProps": {
             "type": "object",

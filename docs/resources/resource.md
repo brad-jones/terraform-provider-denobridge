@@ -64,14 +64,18 @@ resource "foo" "bar" {
 
 ### Optional
 
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
 - `config_file` (String) File path to a deno config file to use with the deno script. Useful for import maps, etc...
 - `permissions` (Attributes) Deno runtime permissions for the script. (see [below for nested schema](#nestedatt--permissions))
+- `write_only_props` (Dynamic, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Input properties to pass to the Deno script that are write-only.
 
 ### Read-Only
 
 - `id` (String) Unique identifier for the resource.
 - `sensitive_state` (Dynamic, Sensitive) Sensitive computed state of the resource as returned by the Deno script. This value is marked as sensitive and will not be displayed in logs or plan output.
 - `state` (Dynamic) Additional computed state of the resource as returned by the Deno script.
+- `write_only_props_version` (Number) Version of the write-only properties.
 
 <a id="nestedatt--permissions"></a>
 
@@ -82,6 +86,75 @@ Optional:
 - `all` (Boolean) Grant all permissions.
 - `allow` (List of String) List of permissions to allow (e.g., 'read', 'write', 'net').
 - `deny` (List of String) List of permissions to deny.
+
+## Write-Only Properties
+
+Write-only properties (available in Terraform 1.11+) allow you to pass sensitive or ephemeral data to your resource without storing it in Terraform state. This is particularly useful when working with ephemeral resources like temporary credentials or tokens.
+
+### Usage Example
+
+```terraform
+ephemeral "denobridge_ephemeral_resource" "api_token" {
+  path = "./get_token.ts"
+  props = {
+    service = "example-api"
+  }
+}
+
+resource "denobridge_resource" "api_call" {
+  path  = "./resource.ts"
+  props = {
+    endpoint = "https://api.example.com"
+    action = "create"
+  }
+
+  # Write-only props are not stored in state
+  write_only_props = {
+    apiToken = ephemeral.denobridge_ephemeral_resource.api_token.result.token
+  }
+}
+```
+
+### How It Works
+
+1. **No State Storage**: Write-only properties are never stored in Terraform state
+2. **Change Detection**: Changes to write-only properties trigger resource updates via the `write_only_props_version` field
+3. **Passed to Script**: Write-only properties are available to your Deno script under `props.writeOnly`
+
+### In Your TypeScript Implementation
+
+Access write-only properties through the `writeOnly` nested field in your props interface:
+
+```ts
+interface Props {
+  endpoint: string;
+  action: string;
+
+  // Write-only properties nested under "writeOnly" key
+  writeOnly?: {
+    apiToken: string;
+  };
+}
+
+new ResourceProvider<Props>({
+  async create(props) {
+    // Access write-only data
+    const token = props.writeOnly?.apiToken;
+
+    // Use it to create the resource
+    await makeApiCall(props.endpoint, token);
+
+    return { id: "resource-id" };
+  },
+  // ... other methods can also access props.writeOnly
+});
+```
+
+**Important Notes:**
+
+- Write-only properties are separate from sensitive state values
+- Sensitive state values are stored (but marked as sensitive), while write-only properties are never stored
+- Changes to write-only properties will cause an update operation, not just a plan refresh
 
 ## Import
 
@@ -138,6 +211,11 @@ import { ResourceProvider } from "@brad-jones/terraform-provider-denobridge";
 interface Props {
   path: string;
   content: string;
+
+  // Optional write-only properties (not stored in state)
+  writeOnly?: {
+    secretKey: string;
+  };
 }
 
 new ResourceProvider<Props>({
@@ -186,6 +264,11 @@ import { ResourceProvider } from "@brad-jones/terraform-provider-denobridge";
 interface Props {
   path: string;
   content: string;
+
+  // Optional write-only properties (not stored in state)
+  writeOnly?: {
+    secretKey: string;
+  };
 }
 
 interface State {
@@ -343,6 +426,10 @@ import { ZodResourceProvider } from "@brad-jones/terraform-provider-denobridge";
 const Props = z.object({
   path: z.string(),
   content: z.string(),
+  // Optional write-only properties (not stored in state)
+  writeOnly: z.object({
+    secretKey: z.string(),
+  }).optional(),
 });
 
 new ZodResourceProvider(Props, {
@@ -375,6 +462,10 @@ import { ZodResourceProvider } from "@brad-jones/terraform-provider-denobridge";
 const Props = z.object({
   path: z.string(),
   content: z.string(),
+  // Optional write-only properties (not stored in state)
+  writeOnly: z.object({
+    secretKey: z.string(),
+  }).optional(),
 });
 
 const State = z.object({

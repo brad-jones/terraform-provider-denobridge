@@ -5,6 +5,9 @@ import { ResourceProvider } from "@brad-jones/terraform-provider-denobridge";
 interface Props {
   path: string;
   content: string;
+  writeOnly?: {
+    specialId: string;
+  };
 }
 
 interface State {

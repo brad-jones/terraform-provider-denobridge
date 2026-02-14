@@ -1,4 +1,4 @@
-import type { JSONRPCClient, JSONRPCMethod, JSONRPCMethods } from "@yieldray/json-rpc-ts";
+import { type JSONRPCClient, JSONRPCError, type JSONRPCMethod, type JSONRPCMethods } from "@yieldray/json-rpc-ts";
 import { createJSocket } from "../jsocket.ts";
 
 /**
@@ -49,7 +49,9 @@ function wrapMethod<T, U>(fn: JSONRPCMethod<T, U>): JSONRPCMethod<T, U> {
     try {
       return await fn(arg);
     } catch (e) {
-      console.error("uncaught error", e);
+      if (!(e instanceof JSONRPCError)) {
+        console.error("uncaught error", e);
+      }
       throw e;
     }
   };

@@ -21,11 +21,21 @@ func TestResource(t *testing.T) {
 			// Create test
 			{
 				Config: `
+					ephemeral "denobridge_ephemeral_resource" "test" {
+						path = "./ephemeral_resource_test.ts"
+						props = {
+							type = "v4"
+						}
+					}
+
 					resource "denobridge_resource" "test" {
 						path  = "./resource_test.ts"
 						props = {
 							path = "./test.txt"
 							content = "Hello World"
+						}
+						write_only_props = {
+							specialId = ephemeral.denobridge_ephemeral_resource.test.result.uuid
 						}
 						permissions = {
 							all = true
@@ -67,11 +77,21 @@ func TestResource(t *testing.T) {
 			// Update in place test
 			{
 				Config: `
+					ephemeral "denobridge_ephemeral_resource" "test" {
+						path = "./ephemeral_resource_test.ts"
+						props = {
+							type = "v4"
+						}
+					}
+
 					resource "denobridge_resource" "test" {
 						path  = "./resource_test.ts"
 						props = {
 							path = "./test.txt"
 							content = "Good Bye"
+						}
+						write_only_props = {
+							specialId = ephemeral.denobridge_ephemeral_resource.test.result.uuid
 						}
 						permissions = {
 							all = true
@@ -113,11 +133,21 @@ func TestResource(t *testing.T) {
 			// Replacement test
 			{
 				Config: `
+					ephemeral "denobridge_ephemeral_resource" "test" {
+						path = "./ephemeral_resource_test.ts"
+						props = {
+							type = "v4"
+						}
+					}
+
 					resource "denobridge_resource" "test" {
 						path  = "./resource_test.ts"
 						props = {
 							path = "./test2.txt"
 							content = "Hello Again"
+						}
+						write_only_props = {
+							specialId = ephemeral.denobridge_ephemeral_resource.test.result.uuid
 						}
 						permissions = {
 							all = true
@@ -167,7 +197,8 @@ func TestResource(t *testing.T) {
 						"all": true
 					}
 				}`,
-				ImportStateVerify: true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"write_only_props_version"},
 			},
 		},
 	})
@@ -330,7 +361,8 @@ func TestResourceWithZod(t *testing.T) {
 						"all": true
 					}
 				}`,
-				ImportStateVerify: true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"write_only_props_version"},
 			},
 		},
 	})
@@ -451,7 +483,8 @@ func TestStatelessResource(t *testing.T) {
 						"all": true
 					}
 				}`,
-				ImportStateVerify: true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"write_only_props_version"},
 			},
 		},
 	})
@@ -572,7 +605,8 @@ func TestStatelessResourceWithZod(t *testing.T) {
 						"all": true
 					}
 				}`,
-				ImportStateVerify: true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"write_only_props_version"},
 			},
 		},
 	})

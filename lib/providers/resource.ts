@@ -200,8 +200,8 @@ export class ResourceProvider<TProps, TState = void, TID = string> extends BaseJ
    */
   constructor(providerMethods: ResourceProviderMethods<TProps, TState, TID>) {
     super(() => ({
-      async create(params: { props: Record<string, unknown> }) {
-        const result = await providerMethods.create(params.props as TProps);
+      async create(params: { props: Record<string, unknown>; writeOnlyProps?: Record<string, unknown> }) {
+        const result = await providerMethods.create({ ...params.props, writeOnly: params.writeOnlyProps } as TProps);
 
         if (isDiagnostics(result)) return result;
 
@@ -234,6 +234,7 @@ export class ResourceProvider<TProps, TState = void, TID = string> extends BaseJ
         params: {
           id: TID;
           nextProps: Record<string, unknown>;
+          nextWriteOnlyProps?: Record<string, unknown>;
           currentProps: Record<string, unknown>;
           currentState: Record<string, unknown>;
           currentSensitiveState?: Record<string, unknown>;
@@ -241,7 +242,7 @@ export class ResourceProvider<TProps, TState = void, TID = string> extends BaseJ
       ) {
         const result = await providerMethods.update(
           params.id,
-          params.nextProps as TProps,
+          { ...params.nextProps, writeOnly: params.nextWriteOnlyProps } as TProps,
           params.currentProps as TProps,
           { ...params.currentState, sensitive: params.currentSensitiveState } as TState,
         );

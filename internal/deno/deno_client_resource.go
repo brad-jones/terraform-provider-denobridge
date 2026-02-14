@@ -43,6 +43,8 @@ func NewDenoClientResource(denoBinaryPath, scriptPath, configPath string, permis
 type CreateRequest struct {
 	// Props contains the resource configuration properties as defined in the Terraform schema
 	Props any `json:"props"`
+	// WriteOnlyProps contains any write-only properties that should be passed to the Deno script but not stored in state
+	WriteOnlyProps any `json:"writeOnlyProps,omitempty"`
 }
 
 // CreateResponse represents the response from creating a Terraform resource.
@@ -139,6 +141,8 @@ type UpdateRequest struct {
 	ID string `json:"id"`
 	// NextProps contains the desired resource configuration properties from Terraform
 	NextProps any `json:"nextProps"`
+	// NextWriteOnlyProps contains any desired write-only properties from Terraform that should be passed to the Deno script but not stored in state
+	NextWriteOnlyProps any `json:"nextWriteOnlyProps,omitempty"`
 	// CurrentProps contains the current resource configuration properties
 	CurrentProps any `json:"currentProps"`
 	// CurrentState contains the current resource state data

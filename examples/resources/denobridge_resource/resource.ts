@@ -5,6 +5,12 @@ import { ResourceProvider } from "@brad-jones/terraform-provider-denobridge";
 interface Props {
   path: string;
   content: string;
+
+  // Values nested under the "writeOnly" key are not stored in Terraform state at all.
+  // Typically they come from ephemeral resources.
+  writeOnly?: {
+    empheralSecret: string;
+  };
 }
 
 interface State {

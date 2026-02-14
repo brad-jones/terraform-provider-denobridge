@@ -53,6 +53,10 @@
               "props": {
                 "type": "object",
                 "description": "User-defined configuration properties for the resource"
+              },
+              "writeOnlyProps": {
+                "type": "object",
+                "description": "Write-only properties passed to the script but not stored in state"
               }
             },
             "required": ["props"]
@@ -294,6 +298,10 @@
               "nextProps": {
                 "type": "object",
                 "description": "New desired configuration properties"
+              },
+              "nextWriteOnlyProps": {
+                "type": "object",
+                "description": "New write-only properties passed to the script but not stored in state"
               },
               "currentProps": {
                 "type": "object",

@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
@@ -35,13 +37,15 @@ type denoBridgeResource struct {
 
 // denoBridgeResourceModel maps the resource schema data.
 type denoBridgeResourceModel struct {
-	ID             types.String        `tfsdk:"id"`
-	Path           types.String        `tfsdk:"path"`
-	Props          types.Dynamic       `tfsdk:"props"`
-	State          types.Dynamic       `tfsdk:"state"`
-	SensitiveState types.Dynamic       `tfsdk:"sensitive_state"`
-	ConfigFile     types.String        `tfsdk:"config_file"`
-	Permissions    *deno.PermissionsTF `tfsdk:"permissions"`
+	ID                    types.String        `tfsdk:"id"`
+	Path                  types.String        `tfsdk:"path"`
+	Props                 types.Dynamic       `tfsdk:"props"`
+	State                 types.Dynamic       `tfsdk:"state"`
+	SensitiveState        types.Dynamic       `tfsdk:"sensitive_state"`
+	ConfigFile            types.String        `tfsdk:"config_file"`
+	Permissions           *deno.PermissionsTF `tfsdk:"permissions"`
+	WriteOnlyProps        types.Dynamic       `tfsdk:"write_only_props"`
+	WriteOnlyPropsVersion types.Int64         `tfsdk:"write_only_props_version"`
 }
 
 // Metadata returns the resource type name.
@@ -68,6 +72,15 @@ func (r *denoBridgeResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"props": schema.DynamicAttribute{
 				Description: "Input properties to pass to the Deno script.",
 				Required:    true,
+			},
+			"write_only_props": schema.DynamicAttribute{
+				Description: "Input properties to pass to the Deno script that are write-only.",
+				WriteOnly:   true,
+				Optional:    true,
+			},
+			"write_only_props_version": schema.Int64Attribute{
+				Description: "Version of the write-only properties.",
+				Computed:    true,
 			},
 			"state": schema.DynamicAttribute{
 				Description: "Additional computed state of the resource as returned by the Deno script.",
@@ -129,11 +142,34 @@ func (r *denoBridgeResource) Configure(_ context.Context, req resource.Configure
 func (r *denoBridgeResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	// Retrieve values from plan
 	var plan denoBridgeResourceModel
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// Retrieve write-only props from config
+	var config denoBridgeResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	writeOnlyProps := dynamic.FromDynamic(config.WriteOnlyProps)
+
+	if writeOnlyProps != nil {
+		// Calculate hash of writeOnlyProps and store in private state
+		writeOnlyPropsHash := hashWriteOnlyProps(writeOnlyProps)
+		resp.Diagnostics.Append(
+			resp.Private.SetKey(ctx, "write_only_props_hash",
+				fmt.Appendf(nil, `{"hash":"%s"}`, writeOnlyPropsHash),
+			)...,
+		)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	// Set the write-only props version to 1 on create
+	plan.WriteOnlyPropsVersion = types.Int64Value(1)
 
 	// Start the Deno server
 	c := deno.NewDenoClientResource(
@@ -153,7 +189,10 @@ func (r *denoBridgeResource) Create(ctx context.Context, req resource.CreateRequ
 	}()
 
 	// Call the create endpoint
-	response, err := c.Create(ctx, &deno.CreateRequest{Props: dynamic.FromDynamic(plan.Props)})
+	response, err := c.Create(ctx, &deno.CreateRequest{
+		Props:          dynamic.FromDynamic(plan.Props),
+		WriteOnlyProps: writeOnlyProps,
+	})
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Failed to create resource",
@@ -286,6 +325,56 @@ func (r *denoBridgeResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
+	// Retrieve write-only props from config
+	var config denoBridgeResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	nextWriteOnlyProps := dynamic.FromDynamic(config.WriteOnlyProps)
+
+	if nextWriteOnlyProps != nil {
+		newHash := hashWriteOnlyProps(nextWriteOnlyProps)
+
+		// Get old hash from private state
+		oldHashBytes, diags := req.Private.GetKey(ctx, "write_only_props_hash")
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		var hashWrapper struct {
+			Hash string `json:"hash"`
+		}
+		if err := json.Unmarshal(oldHashBytes, &hashWrapper); err != nil {
+			resp.Diagnostics.AddError(
+				"Failed to read write-only properties hash",
+				fmt.Sprintf("Could not parse hash from private state: %s", err.Error()),
+			)
+			return
+		}
+		oldHash := hashWrapper.Hash
+
+		// If the hash of the write-only props has changed, increment the version to trigger an update in the Deno script
+		if oldHash != newHash {
+			plan.WriteOnlyPropsVersion = types.Int64Value(state.WriteOnlyPropsVersion.ValueInt64() + 1)
+
+			// Update stored hash in private state
+			resp.Diagnostics.Append(
+				resp.Private.SetKey(ctx, "write_only_props_hash",
+					fmt.Appendf(nil, `{"hash":"%s"}`, newHash),
+				)...,
+			)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		} else {
+			// No change, keep version as-is
+			plan.WriteOnlyPropsVersion = state.WriteOnlyPropsVersion
+		}
+	} else {
+		plan.WriteOnlyPropsVersion = state.WriteOnlyPropsVersion
+	}
+
 	// Start the Deno server
 	c := deno.NewDenoClientResource(
 		r.providerConfig.DenoBinaryPath,
@@ -307,6 +396,7 @@ func (r *denoBridgeResource) Update(ctx context.Context, req resource.UpdateRequ
 	response, err := c.Update(ctx, &deno.UpdateRequest{
 		ID:                    state.ID.ValueString(),
 		NextProps:             dynamic.FromDynamic(plan.Props),
+		NextWriteOnlyProps:    nextWriteOnlyProps,
 		CurrentProps:          dynamic.FromDynamic(state.Props),
 		CurrentState:          dynamic.FromDynamic(state.State),
 		CurrentSensitiveState: dynamic.FromDynamic(state.SensitiveState),
@@ -616,4 +706,23 @@ func (r *denoBridgeResource) ImportState(ctx context.Context, req resource.Impor
 		ConfigFile:  types.StringPointerValue(importConfig.ConfigFile),
 		Permissions: importConfig.Permissions.MapToDenoPermissionsTF(),
 	})...)
+}
+
+// hashWriteOnlyProps creates a SHA256 hash of the write-only properties for change detection.
+// Returns an empty string if props is nil.
+func hashWriteOnlyProps(props any) string {
+	if props == nil {
+		return ""
+	}
+
+	// Serialize to JSON for consistent hashing
+	data, err := json.Marshal(props)
+	if err != nil {
+		// If we can't marshal, return empty string
+		return ""
+	}
+
+	// Create SHA256 hash
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
 }
